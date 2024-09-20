@@ -64,23 +64,12 @@ __global__ void deviceMatmul_2D_shared(
     __shared__ float ds_B[TILE_SIZE][TILE_SIZE];
     int phase = (N - 1) / TILE_SIZE + 1;
     for(int p=0; p<phase;p++) {
-        // row -> y, col -> x, 2D array
-        if (d_A[row*N + p*TILE_SIZE + threadIdx.x] == 0) {
-            printf("d_A[%d] == 0", row*N + p*TILE_SIZE + threadIdx.x);
-        }
-
-        if (d_B[(p*TILE_SIZE + threadIdx.y)*K + col] == 0) {
-            printf("d_B[%d] == 0", (p*TILE_SIZE + threadIdx.y)*K + col);
-        }
         ds_A[threadIdx.y][threadIdx.x] = d_A[row*N + p*TILE_SIZE + threadIdx.x];
         ds_B[threadIdx.y][threadIdx.x] = d_B[(p*TILE_SIZE + threadIdx.y)*K + col];
 
         __syncthreads();
         for (int i=0; i<TILE_SIZE; i++) {
             // constant: ds_A's x , ds_B's y
-            if (ds_A[threadIdx.y][i] * ds_B[i][threadIdx.x] == 0) {
-                printf("ds_A[%d][%d] = %f, ds_B[%d][%d] = %f, row=%d col=%d p=%d\n", threadIdx.y, i, ds_A[threadIdx.y][i], i, threadIdx.x, ds_B[i][threadIdx.x], row, col, p);
-            }
             cVal += ds_A[threadIdx.y][i] * ds_B[i][threadIdx.x];
         }
         __syncthreads();
