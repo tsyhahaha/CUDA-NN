@@ -123,7 +123,7 @@ optimize the r/w process.
 computation into this thread
 ***************************************************************
 */
-__global__ void deviceMatmul_2D_shared_rigister_1st(
+__global__ void deviceMatmul_2D_shared_register_1st(
     float *d_A, float *d_B, float *d_C, int M, int N, int K
 ) {
     int row = (blockIdx.y * blockDim.y + threadIdx.y) * TIED_SIZE;
@@ -175,7 +175,7 @@ optimize the r/w process.
 memory r/w rather than just use computation threads.
 ***************************************************************
 */
-__global__ void deviceMatmul_2D_shared_rigister_2nd(
+__global__ void deviceMatmul_2D_shared_register_2nd(
     float *d_A, float *d_B, float *d_C, int M, int N, int K
 ) {
     int row = (blockIdx.y * blockDim.y + threadIdx.y) * TIED_SIZE;
@@ -233,7 +233,7 @@ __global__ void deviceMatmul_2D_shared_rigister_2nd(
 using float4 type to optimize the w/r velocity.
 ***************************************************************
 */
-__global__ void deviceMatmul_2D_shared_rigister_float4_1st(
+__global__ void deviceMatmul_2D_shared_register_float4_1st(
     float *d_A, float *d_B, float *d_C, int M, int N, int K
 ) {
     int row = (blockIdx.y * blockDim.y + threadIdx.y) * TIED_SIZE;

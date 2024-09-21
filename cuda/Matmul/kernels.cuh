@@ -20,15 +20,15 @@ __global__ void deviceMatmul_2D_register(
     float *d_A, float *d_B, float *d_C, int M, int N, int K
 );
 
-__global__ void deviceMatmul_2D_shared_rigister_1st(
+__global__ void deviceMatmul_2D_shared_register_1st(
     float *d_A, float *d_B, float *d_C, int M, int N, int K
 );
 
-__global__ void deviceMatmul_2D_shared_rigister_2st(
+__global__ void deviceMatmul_2D_shared_register_2st(
     float *d_A, float *d_B, float *d_C, int M, int N, int K
 );
 
-__global__ void deviceMatmul_2D_shared_rigister_float4_1st(
+__global__ void deviceMatmul_2D_shared_register_float4_1st(
     float *d_A, float *d_B, float *d_C, int M, int N, int K
 );
 

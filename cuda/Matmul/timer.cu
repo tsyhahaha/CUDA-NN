@@ -133,12 +133,12 @@ int main(void) {
     // 2D block; 2D grid; op1.1: use shared memory
     TEST_KERNEL(deviceMatmul_2D_shared);
     ////////////////////////////////////////////////////////
-    // 2D block; 2D grid; op1.2: use rigister
+    // 2D block; 2D grid; op1.2: use register
     TEST_KERNEL(deviceMatmul_2D_register);
     ///////////////////////////////////////////////////////////  
-    // 2D block; 2D grid; op2.1 use shared memory and rigister
-    TEST_KERNEL(deviceMatmul_2D_shared_rigister_1st);
-    TEST_KERNEL(deviceMatmul_2D_shared_rigister_2st);
+    // 2D block; 2D grid; op2.1 use shared memory and register
+    TEST_KERNEL(deviceMatmul_2D_shared_register_1st);
+    TEST_KERNEL(deviceMatmul_2D_shared_register_2st);
 
     // free memory
     free(h_A);
