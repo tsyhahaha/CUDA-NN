@@ -138,7 +138,7 @@ int main(void) {
     ///////////////////////////////////////////////////////////  
     // 2D block; 2D grid; op2.1 use shared memory and register
     TEST_KERNEL(deviceMatmul_2D_shared_register_1st);
-    TEST_KERNEL(deviceMatmul_2D_shared_register_2st);
+    TEST_KERNEL(deviceMatmul_2D_shared_register_2nd);
 
     // free memory
     free(h_A);
