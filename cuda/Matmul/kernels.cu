@@ -38,7 +38,8 @@ __global__ void deviceMatmul_2D(
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if(row >= M || col >= K) return;
+    if(row >= M || col >= K) {
+        return; }
 
     for (int i=0; i<N; i++) {
         cVal += d_A[row*N + i] * d_B[i*K + col];
@@ -58,13 +59,14 @@ __global__ void deviceMatmul_2D_shared(
     float cVal = 0.0f;
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
-    if(row >= M || col >= K) return;
 
-    __shared__ float ds_A[TILE_SIZE][TILE_SIZE];
-    __shared__ float ds_B[TILE_SIZE][TILE_SIZE];
+    __shared__ float ds_A[BLOCK_SIZE][TILE_SIZE];
+    __shared__ float ds_B[TILE_SIZE][BLOCK_SIZE];
     int phase = (N - 1) / TILE_SIZE + 1;
     for(int p=0; p<phase;p++) {
+        if (row < M && p*TILE_SIZE + threadIdx.x < N && threadIdx.x < TILE_SIZE) 
         ds_A[threadIdx.y][threadIdx.x] = d_A[row*N + p*TILE_SIZE + threadIdx.x];
+        if(p*TILE_SIZE + threadIdx.y < N && col < K && threadIdx.y < TILE_SIZE)
         ds_B[threadIdx.y][threadIdx.x] = d_B[(p*TILE_SIZE + threadIdx.y)*K + col];
 
         __syncthreads();
@@ -75,20 +77,21 @@ __global__ void deviceMatmul_2D_shared(
         __syncthreads();
     }
 
-    d_C[row*K + col] = cVal;
+    if (row < M && col < K)
+        d_C[row*K + col] = cVal;
 }
 
 /*
 ************************************************************** 
 increase computation times per thread to hide latency of r/w,
 i.e. each thread evaluates multiple matrix values through regs.
-BLOCK_SIZE are divided y TIED_SIZE
+BLOCK_SIZE need to divide by TIED_SIZE, but if you don't, it's okay, except
+wasting some threads resources in a block.
 ***************************************************************
 */
 __global__ void deviceMatmul_2D_register(
     float *d_A, float *d_B, float *d_C, int M, int N, int K
 ) {
-    float cVal = 0.0f;
     int row = (blockIdx.y * blockDim.y + threadIdx.y) * TIED_SIZE;
     int col = (blockIdx.x * blockDim.x + threadIdx.x) * TIED_SIZE;
     float tie[TIED_SIZE][TIED_SIZE] = {0.0f};
@@ -112,6 +115,173 @@ __global__ void deviceMatmul_2D_register(
     }
 }
 
+/*
+************************************************************** 
+using both TILE technology(shared mem) and register to 
+optimize the r/w process. 
+1st version: Integrate all the memory r/w involved in the 
+computation into this thread
+***************************************************************
+*/
+__global__ void deviceMatmul_2D_shared_rigister_1st(
+    float *d_A, float *d_B, float *d_C, int M, int N, int K
+) {
+    int row = (blockIdx.y * blockDim.y + threadIdx.y) * TIED_SIZE;
+    int col = (blockIdx.x * blockDim.x + threadIdx.x) * TIED_SIZE;
 
+    // shared memory need to expand TIED_SIZE times on each dim
+    __shared__ float ds_A[BLOCK_SIZE * TIED_SIZE][TILE_SIZE];
+    __shared__ float ds_B[TILE_SIZE][BLOCK_SIZE * TIED_SIZE];
+    int phase = (N - 1) / TILE_SIZE + 1;
+    // register array
+    float tie[TIED_SIZE][TIED_SIZE] = {0.0f};
 
+    for(int p=0; p<phase;p++) {
+        for (int i=0; i<TIED_SIZE; i++) {
+            for(int j=0; j<TILE_SIZE; j++) {
+                if ((row + i) < M && (p*TILE_SIZE + j) < N)
+                    ds_A[threadIdx.y * TIED_SIZE + i][j] = d_A[(row + i) * N + p * TILE_SIZE + j];
 
+                if ((p*TILE_SIZE + j) < N && (col + i) < K)
+                    ds_B[j][threadIdx.x * TIED_SIZE + i] = d_B[(p*TILE_SIZE + j) * K + col + i];
+            }
+        }
+        __syncthreads();
+
+        for (int i=0; i<TIED_SIZE; i++) {
+            for(int j=0; j<TIED_SIZE; j++) {
+                for(int k=0; k<TILE_SIZE; k++)
+                    tie[i][j] += ds_A[threadIdx.y * TIED_SIZE + i][k] * ds_B[k][threadIdx.x * TIED_SIZE + j];
+            }
+        }
+        __syncthreads();
+    }
+    
+    // write tied result to d_C
+    for(int i=0; i<TIED_SIZE; i++) {
+        for (int j=0; j<TIED_SIZE; j++) {
+            if (row + i < M && col + j < K) {
+                d_C[(row+i) * K + col + j] = tie[i][j];
+            }
+        }
+    }
+}
+
+/*
+************************************************************** 
+using both TILE technology(shared mem) and register to 
+optimize the r/w process. 
+2nd version: Use the saved threads within the block for 
+memory r/w rather than just use computation threads.
+***************************************************************
+*/
+__global__ void deviceMatmul_2D_shared_rigister_2nd(
+    float *d_A, float *d_B, float *d_C, int M, int N, int K
+) {
+    int row = (blockIdx.y * blockDim.y + threadIdx.y) * TIED_SIZE;
+    int col = (blockIdx.x * blockDim.x + threadIdx.x) * TIED_SIZE;
+
+    // shared memory need to expand TIED_SIZE times on each dim
+    __shared__ float ds_A[BLOCK_SIZE * TIED_SIZE][TILE_SIZE];
+    __shared__ float ds_B[TILE_SIZE][BLOCK_SIZE * TIED_SIZE];
+    int phase = (N - 1) / TILE_SIZE + 1;
+    // register array
+    float tie[TIED_SIZE][TIED_SIZE] = {0.0f};
+
+    int id = threadIdx.x + threadIdx.y * blockDim.x;
+    int ds_row = id / BLOCK_SIZE, ds_col = id % BLOCK_SIZE; // assume that TILE_SIZE == BLOCK_SIZE
+
+    for(int p=0; p<phase;p++) {
+        // Read the data with some other thread
+        if (row + TIED_SIZE - 1 < M && ds_col + p*TILE_SIZE < N &&
+            TIED_SIZE*ds_row+TIED_SIZE -1 < BLOCK_SIZE * TIED_SIZE && 
+            ds_col < TILE_SIZE) {
+            for (int i = 0; i < TILE_SIZE; i++) 
+                ds_A[TIED_SIZE * ds_row + i][ds_col] = d_A[(row + i) * N + ds_col + p * TILE_SIZE];
+        }
+        if (ds_row + p * TILE_SIZE < N && col + TIED_SIZE - 1 < K &&
+            TIED_SIZE * ds_col + TIED_SIZE -1 < BLOCK_SIZE * TIED_SIZE &&
+            ds_row < TILE_SIZE
+        ) {
+            for (int i=0; i<TILE_SIZE; i++) 
+                ds_B[ds_row][TIED_SIZE * ds_col + i] = d_B[(ds_row + p * TILE_SIZE) * K + col + i];
+        }
+
+        __syncthreads();
+
+        for (int i=0; i<TIED_SIZE; i++) {
+            for(int j=0; j<TIED_SIZE; j++) {
+                for(int k=0; k<TILE_SIZE; k++)
+                    tie[i][j] += ds_A[threadIdx.y * TIED_SIZE + i][k] * ds_B[k][threadIdx.x * TIED_SIZE + j];
+            }
+        }
+        __syncthreads();
+    }
+    
+    // write tied result to d_C
+    for(int i=0; i<TIED_SIZE; i++) {
+        for (int j=0; j<TIED_SIZE; j++) {
+            if (row + i < M && col + j < K) {
+                d_C[(row+i) * K + col + j] = tie[i][j];
+            }
+        }
+    }
+}
+
+/*
+************************************************************** 
+using float4 type to optimize the w/r velocity.
+***************************************************************
+*/
+__global__ void deviceMatmul_2D_shared_rigister_float4_1st(
+    float *d_A, float *d_B, float *d_C, int M, int N, int K
+) {
+    int row = (blockIdx.y * blockDim.y + threadIdx.y) * TIED_SIZE;
+    int col = (blockIdx.x * blockDim.x + threadIdx.x) * TIED_SIZE;
+
+    // shared memory need to expand TIED_SIZE times on each dim
+    __shared__ float ds_A[BLOCK_SIZE * TIED_SIZE][TILE_SIZE];
+    __shared__ float ds_B[TILE_SIZE][BLOCK_SIZE * TIED_SIZE];
+    int phase = (N - 1) / TILE_SIZE + 1;
+    // register array
+    float tie[TIED_SIZE][TIED_SIZE] = {0.0f};
+
+    int id = threadIdx.x + threadIdx.y * blockDim.x;
+    int ds_row = id / BLOCK_SIZE, ds_col = id % BLOCK_SIZE; // assume that TILE_SIZE == BLOCK_SIZE
+
+    for(int p=0; p<phase;p++) {
+        // Read the data with some other thread
+        if (row + TIED_SIZE - 1 < M && ds_col + p*TILE_SIZE < N &&
+            TIED_SIZE*ds_row+TIED_SIZE -1 < BLOCK_SIZE * TIED_SIZE && 
+            ds_col < TILE_SIZE) {
+            for (int i = 0; i < TILE_SIZE; i++) 
+                ds_A[TIED_SIZE * ds_row + i][ds_col] = d_A[(row + i) * N + ds_col + p * TILE_SIZE];
+        }
+        if (ds_row + p * TILE_SIZE < N && col + TIED_SIZE - 1 < K &&
+            TIED_SIZE * ds_col + TIED_SIZE -1 < BLOCK_SIZE * TIED_SIZE &&
+            ds_row < TILE_SIZE
+        ) {
+            for (int i=0; i<TILE_SIZE; i++) 
+                ds_B[ds_row][TIED_SIZE * ds_col + i] = d_B[(ds_row + p * TILE_SIZE) * K + col + i];
+        }
+
+        __syncthreads();
+
+        for (int i=0; i<TIED_SIZE; i++) {
+            for(int j=0; j<TIED_SIZE; j++) {
+                for(int k=0; k<TILE_SIZE; k++)
+                    tie[i][j] += ds_A[threadIdx.y * TIED_SIZE + i][k] * ds_B[k][threadIdx.x * TIED_SIZE + j];
+            }
+        }
+        __syncthreads();
+    }
+    
+    // write tied result to d_C
+    for(int i=0; i<TIED_SIZE; i++) {
+        for (int j=0; j<TIED_SIZE; j++) {
+            if (row + i < M && col + j < K) {
+                d_C[(row+i) * K + col + j] = tie[i][j];
+            }
+        }
+    }
+}
