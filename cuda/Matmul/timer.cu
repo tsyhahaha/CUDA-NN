@@ -78,16 +78,15 @@ int main(void) {
     bool is_right;
     int compute_times = 10;
     float gpu_elapsed_time_ms, cpu_elapsed_time_ms;
-    int M = 16, N = 32, K = 32;
+    int M = 16, N = 32, K = 16;
     size_t nBytes_A = M * N * sizeof(float);
     size_t nBytes_B = N * K * sizeof(float);
     size_t nBytes_C = M * K * sizeof(float);
     
     // alloc host memory
     float *h_A, *h_B, *h_C, *h_activations, *h_CC;
-    const char* path_A = "/home/taosiyuan/cudaCode/CUDA-programming/data/bn1.weight.txt";
-    // const char* path_B = "/home/taosiyuan/cudaCode/CUDA-programming/data/bn1.weight.txt";
-    const char* path_B = "/home/taosiyuan/cudaCode/CUDA-programming/data/bn2.weight.txt";
+    const char* path_A = "../../data/bn1.weight.txt";
+    const char* path_B = "../../data/bn1.weight.txt";
     h_A = loadWeights(path_A, M, N);
     h_B = loadWeights(path_B, N, K);
     h_C = (float *)malloc(nBytes_C);

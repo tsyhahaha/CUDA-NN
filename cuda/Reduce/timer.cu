@@ -100,7 +100,7 @@ int main(void) {
 
     // definition
     bool is_right;
-    int compute_times = 100;
+    int compute_times = 10;
     float gpu_elapsed_time_ms, cpu_elapsed_time_ms;
     int N = 512; // reduce vector
     size_t nBytes_M = N * sizeof(float);
