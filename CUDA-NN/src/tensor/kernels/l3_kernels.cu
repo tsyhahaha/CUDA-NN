@@ -26,10 +26,18 @@ void kMatmul_l3(
 
     int phase = (N - 1) / TILE_SIZE + 1;
     for(int p=0; p<phase;p++) {
-        if (row < M && p*TILE_SIZE + threadIdx.x < N && threadIdx.x < TILE_SIZE) 
-        ds_A[threadIdx.y][threadIdx.x] = d_A[row*N + p*TILE_SIZE + threadIdx.x];
-        if(p*TILE_SIZE + threadIdx.y < N && col < K && threadIdx.y < TILE_SIZE)
-        ds_B[threadIdx.y][threadIdx.x] = d_B[(p*TILE_SIZE + threadIdx.y)*K + col];
+        if (row < M && p*TILE_SIZE + threadIdx.x < N && threadIdx.x < TILE_SIZE) {
+            ds_A[threadIdx.y][threadIdx.x] = d_A[row*N + p*TILE_SIZE + threadIdx.x];
+        } else if(threadIdx.y < BLOCK_SIZE2D && threadIdx.x < TILE_SIZE) {
+            // PS: It's faster  if TILE_SIZE is a factor of the matrix dimension
+            ds_A[threadIdx.y][threadIdx.x] = 0.0f;
+        }
+
+        if(p*TILE_SIZE + threadIdx.y < N && col < K && threadIdx.y < TILE_SIZE) {
+            ds_B[threadIdx.y][threadIdx.x] = d_B[(p*TILE_SIZE + threadIdx.y)*K + col];
+        } else if(threadIdx.y < TILE_SIZE && threadIdx.x < BLOCK_SIZE2D) {
+            ds_B[threadIdx.y][threadIdx.x] = 0.0f;
+        }
 
         __syncthreads();
         for (int i=0; i<TILE_SIZE; i++) {
@@ -53,20 +61,23 @@ void kMatmulTransposed_l3(
 
     if(row >= M || col >= K) return;
 
-    // TILE_SIZE == BLOCK_SIZE2D
     __shared__ float ds_A[BLOCK_SIZE2D][TILE_SIZE];
     __shared__ float ds_B[BLOCK_SIZE2D][TILE_SIZE];
 
     int phase = (N - 1) / TILE_SIZE + 1;
-    for(int p=0; p<phase;p++) {
+    for(int p=0; p<phase;p++) { 
         if (row < M && p*TILE_SIZE + threadIdx.x < N && threadIdx.x < TILE_SIZE) {
             // ds_A[ty][tx] = d_A[row][p*TILE_SIZE + tx]
             ds_A[threadIdx.y][threadIdx.x] = d_A[row*N + p*TILE_SIZE + threadIdx.x];
+        } else if(threadIdx.y < BLOCK_SIZE2D && threadIdx.x < TILE_SIZE) {
+            ds_A[threadIdx.y][threadIdx.x] = 0.0f;
         }
-            
+        
         if (col < K && p*TILE_SIZE + threadIdx.y < N && threadIdx.y < TILE_SIZE) {
             // ds_B[tx][ty] = d_B[col][p*TILE_SIZE + ty]
             ds_B[threadIdx.x][threadIdx.y] = d_B[col*N + p*TILE_SIZE + threadIdx.y]; 
+        } else if(threadIdx.x < BLOCK_SIZE2D && threadIdx.y < TILE_SIZE) {
+            ds_B[threadIdx.x][threadIdx.y] = 0.0f;
         }
 
         __syncthreads();
@@ -77,7 +88,7 @@ void kMatmulTransposed_l3(
         __syncthreads();
     }
 
-    printf("M=%d N=%d K=%d, d_out[%d][%d] = %f\n", M, N, K, row, col, cVal);
+    // printf("M=%d N=%d K=%d, d_out[%d][%d] = %f\n", M, N, K, row, col, cVal);
     d_out[row*K + col] = cVal;
 }
 

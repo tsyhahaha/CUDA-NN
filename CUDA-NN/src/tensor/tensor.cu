@@ -43,6 +43,10 @@ size_t Tensor::getDim() {
     return this->shape.size();
 }
 
+size_t Tensor::getDataNum() {
+    return this->n_data;
+}
+
 DimVector Tensor::getShape(){
     return this->shape;
 }
@@ -94,6 +98,12 @@ void Tensor::initialize(InitType type) {
                 else     h_d[i*s + j] = 0.0f;
             }
         }
+    } else if(type==RANDOM) {
+        float MAX = 1.0f;
+        float MIN = 0.0f;
+        for (int i=0; i<n_data; i++) {
+            h_d[i] = 1.0f + randomFloat(MIN, MAX);
+        }
     } else {
         perror("Not implemented!");
     }
@@ -101,8 +111,13 @@ void Tensor::initialize(InitType type) {
     CHECK(cudaMemcpy(d_data, h_d, nBytes, cudaMemcpyHostToDevice));
 }
 
-void Tensor::initialize(float *h_data, size_t size) {
-    size_t nBytes = size * sizeof(float);
+void Tensor::initialize(float *h_data, DimVector shape) {
+    assert(this->shape == shape);
+    int n_data = 1;
+    for(int i=0; i<shape.size(); i++) {
+        n_data *= shape[i];
+    }
+    size_t nBytes = n_data * sizeof(float);
     CHECK(cudaMemcpy(d_data, h_data, nBytes, cudaMemcpyHostToDevice));
 }
 
@@ -245,16 +260,17 @@ Tensor* Tensor::matmul(Tensor* tensor) {
             // the requirement of implementation
             float* d_tmp;
             CHECK(cudaMalloc((float **)&d_tmp, grid * sizeof(float)));
-            kMatmul_l1<<<grid, block>>>((&mat1)->d_data, d_tmp, tensor_o->d_data, this->n_data);
-            CHECK(cudaMemcpy((&mat2)->d_data, d_tmp, sizeof(float), cudaMemcpyDeviceToDevice));
+            kMatmul_l1<<<grid, block>>>((&mat1)->d_data, (&mat2)->d_data, d_tmp, this->n_data);
+            CHECK_KERNEL();
+            CHECK(cudaMemcpy(tensor_o->d_data, d_tmp, sizeof(float), cudaMemcpyDeviceToDevice));
+            CHECK(cudaFree(d_tmp));
         } else if(dim1 == 2) {
             if(dim2 == 1) {
                 int block = BLOCK_SIZE1D;
                 dim3 grid(1, (shape1[0] - 1) / block + 1);
                 int M = shape1[0], N = shape1[1];
-                printf("M=%d, N=%d\n", M, N);
-
                 kMatmul_l2<<<grid, block>>>((&mat1)->d_data, (&mat2)->d_data, tensor_o->d_data, M, N);
+                CHECK_KERNEL();
             } else {
                 dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
                 int x = shape_o[0], y = shape_o[1];
@@ -262,7 +278,6 @@ Tensor* Tensor::matmul(Tensor* tensor) {
                 int M = shape1[0], N = shape1[1], K = shape2[0];
                 kMatmulTransposed_l3<<<grid, block>>>((&mat1)->d_data, (&mat2)->d_data, tensor_o->d_data, M, N, K);
                 CHECK_KERNEL();
-                return tensor_o;
             }
         } else {
             perror("Not implemented!");
