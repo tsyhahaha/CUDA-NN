@@ -138,7 +138,7 @@ class PointNetEncoder(nn.Module):
             return torch.cat([x, pointfeat], 1), trans, trans_feat
 
 
-def feature_transform_reguliarzer(trans):
+def feature_transform_regularizer(trans):
     d = trans.size()[1]
     I = torch.eye(d)[None, :, :]
     if trans.is_cuda:
@@ -178,7 +178,7 @@ class Loss(torch.nn.Module):
 
     def forward(self, pred, target, trans_feat):
         loss = F.nll_loss(pred, target)
-        mat_diff_loss = feature_transform_reguliarzer(trans_feat)
+        mat_diff_loss = feature_transform_regularizer(trans_feat)
 
         total_loss = loss + mat_diff_loss * self.mat_diff_loss_scale
         return total_loss
