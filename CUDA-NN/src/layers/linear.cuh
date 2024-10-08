@@ -5,12 +5,11 @@
 #include <string>
 #include <cstring> // For strcmp
 
-#include "../tensor/tensor.cuh"
-#include "../common/utils.cuh"
-#include "layer.cuh"
+#include "tensor.cuh"
+#include "base.cuh"
 
 
-class Linear: public Layer {
+class Linear: public BaseLayer {
     private:
         int in_features;
         int out_features; 

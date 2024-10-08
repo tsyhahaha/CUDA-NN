@@ -62,8 +62,9 @@ void print_M(float* weight, const std::vector<size_t>& shape) {
     } else if(dim == 3) {
         int bz = shape[0], m = shape[1], n = shape[2];
         for(int b = 0; b < bz; b++) {
-            printf("[");
+            printf("--------------batch %d---------------\n", b+1);
             for (int i=0; i<m; i++) {
+                printf("[");
                 for (int j=0; j<n; j++) {
                     printf("%.3f ", weight[b * m * n + i * n + j]);
                 }

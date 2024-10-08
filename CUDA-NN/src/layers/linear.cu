@@ -11,10 +11,8 @@ Linear::Linear(size_t in_features, size_t out_features, bool bias = 0, InitType 
     
     if(bias) {
         DimVector bias_shape = {out_features};
-        this->bias = new Tensor(bias_shape);
+        this->bias = new Tensor(bias_shape, ZERO);
         this->bias->initialize(0.0f);
-    } else {
-        this->bias = nullptr;
     }
 }
 

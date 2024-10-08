@@ -1,12 +1,13 @@
 #include "kernels.cuh"
+#include "configure.cuh"
 
 __global__
-void kScale(float *d_data, float factor, size_t N) {
+void kScale(float *d_data, float factor, float offset, size_t N) {
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (tid >= N) return;
 
-    d_data[tid] = d_data[tid] * factor;
+    d_data[tid] = d_data[tid] * factor + offset;
 }
 
 __global__

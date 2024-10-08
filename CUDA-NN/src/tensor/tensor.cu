@@ -1,13 +1,14 @@
 #include "tensor.cuh"
 
 // Declarations
+bool isContinuousSqueeze(DimVector& shape1, DimVector& shape2);
 bool isBroadcast(DimVector& shape1, DimVector& shape2);
 DimVector getBroadcastShape(DimVector& shape1, DimVector& shape2);
 bool checkMatmulShape(DimVector& shape1, DimVector& shape2);
 DimVector getMatmulShape(DimVector& shape1, DimVector& shape2);
 DimVector getBatchMatmulShape(DimVector& shape1, DimVector& shape2);
 
-Tensor::Tensor(DimVector& shape) {
+Tensor::Tensor(DimVector& shape, InitType init_type) {
     this->shape = shape;
     int dim = shape.size();
     size_t ndata = 1;
@@ -17,6 +18,8 @@ Tensor::Tensor(DimVector& shape) {
     }
     this->n_data = ndata;
     CHECK(cudaMalloc(&(this->d_data), ndata * sizeof(float)));
+
+    this->initialize(init_type);
 }
 
 Tensor::Tensor(float *h_data, DimVector& shape) {
@@ -105,15 +108,15 @@ void Tensor::initialize(InitType type) {
             h_d[i] = 1.0f + randomFloat(MIN, MAX);
         }
     } else {
-        perror("Not implemented!");
+        ERROR("Not implemented!");
     }
     
     CHECK(cudaMemcpy(d_data, h_d, nBytes, cudaMemcpyHostToDevice));
 }
 
-void Tensor::initialize(float *h_data, DimVector shape) {
+void Tensor::initialize(float *h_data, DimVector& shape) {
     assert(this->shape == shape);
-    int n_data = 1;
+    size_t n_data = 1;
     for(int i=0; i<shape.size(); i++) {
         n_data *= shape[i];
     }
@@ -122,6 +125,30 @@ void Tensor::initialize(float *h_data, DimVector shape) {
 }
 
 /* Unary op */
+
+/*
+3 types reshape:
+ - swap dim
+ - squeeze dim
+ - unsqueeze dim
+only continuous compression are supported (just change the shape).
+*/
+void Tensor::reshape(DimVector& shape_n) {
+    size_t dim = this->getDim();
+    size_t dim_n = shape_n.size();
+
+    if(dim_n == dim) {
+        // dim swap, internal transpose?
+        // TODO
+    } else {
+        if(isContinuousSqueeze(this->shape, shape_n)) {
+            this->shape = shape_n;
+        } else {
+            ERROR("Failed to reshape!");
+            exit(0);
+        }
+    }
+}
 
 void Tensor::transpose() {
     if(this->shape.size() == 2) {
@@ -133,6 +160,7 @@ void Tensor::transpose() {
         dim3 grid((y-1)/BLOCK_SIZE2D + 1, (x-1)/BLOCK_SIZE2D + 1);
 
         kTranspose<<<grid, block>>>(this->d_data, d_out, x, y);
+        CHECK_KERNEL();
 
         // update this->d_data
         float* prev = this->d_data;
@@ -140,7 +168,7 @@ void Tensor::transpose() {
         CHECK(cudaFree(prev));
         std::swap(this->shape[0], this->shape[1]);
     } else {
-        perror("Transpose failed: the dim != 2.");
+        ERROR("Transpose failed: the dim != 2.");
     }
 }
 
@@ -148,7 +176,24 @@ void Tensor::scale_(float factor) {
     dim3 block(BLOCK_SIZE1D);
     dim3 grid((this->n_data-1)/BLOCK_SIZE1D + 1);
     // need padding?
-    kScale<<<grid, block>>>(this->d_data, factor, this->n_data);
+    kScale<<<grid, block>>>(this->d_data, factor, 0.0f, this->n_data);
+    CHECK_KERNEL();
+}
+
+void Tensor::add_(float c) {
+    dim3 block(BLOCK_SIZE1D);
+    dim3 grid((this->n_data-1)/BLOCK_SIZE1D + 1);
+    // need padding?
+    kScale<<<grid, block>>>(this->d_data, 1.0f, c, this->n_data);
+    CHECK_KERNEL();
+}
+
+void Tensor::sub_(float c) {
+    dim3 block(BLOCK_SIZE1D);
+    dim3 grid((this->n_data-1)/BLOCK_SIZE1D + 1);
+    // need padding?
+    kScale<<<grid, block>>>(this->d_data, 1.0f, -c, this->n_data);
+    CHECK_KERNEL();
 }
 
 float Tensor::sum(){
@@ -222,10 +267,10 @@ Tensor* Tensor::saxpy(Tensor* tensor, float f1, float f2) {
             
             
         } else {
-            perror("Not implemented!");
+            ERROR("Not implemented!");
         }
     } else {
-        perror("Failed to broadcast!");
+        ERROR("Failed to broadcast!");
     }
     return tensor_o;  
 }
@@ -280,12 +325,12 @@ Tensor* Tensor::matmul(Tensor* tensor) {
                 CHECK_KERNEL();
             }
         } else {
-            perror("Not implemented!");
+            ERROR("Not implemented!");
         }
         return tensor_o;
 
     } else {
-        perror("Failed to match mats' shape!");
+        ERROR("Failed to match mats' shape!");
     }
     return nullptr;
 }
@@ -304,9 +349,64 @@ Tensor* Tensor::bmm(Tensor* tensor) {
     if(!shape_o.empty()) {
         
     } else {
-        perror("Failed to match mats' shape!");
+        ERROR("Failed to match mats' shape!");
     }
     return nullptr;
+}
+
+
+/* tool funcs */
+
+bool isContinuousSqueeze(DimVector& shape1, DimVector& shape2) {
+    size_t dim1 = shape1.size();
+    size_t dim2 = shape2.size();
+
+    int i = dim1 - 1, j = dim2 - 1;
+    int acc_1 = 0, acc_2 = 0;
+
+    while(i >= 0 && j >= 0) {
+        // printf("shape1[%d] = %ld, shape2[%d] = %ld\n", i, shape1[i], j, shape2[j]);
+        if(acc_1 == 0 && acc_2 == 0) {
+            if (shape1[i] == shape2[j]){
+                i--; j--;
+            } else {
+                if (shape1[i] > shape2[j]) {
+                    acc_2 = shape2[j];
+                    j--;
+                } else {
+                    acc_1 = shape1[i];
+                    i--;
+                }
+            }
+        } else {
+            if (acc_1 != 0) {
+                acc_1 *= shape1[i];
+                if (acc_1 == shape2[j]) {
+                    i--; j--;
+                    acc_1 = 0;
+                } else if(acc_1 < shape2[j]) {
+                    i--;
+                } else {
+                    ERROR("Shape squeeze invalid!\n");
+                }
+            } else if(acc_2 != 0) {
+                acc_2 *= shape2[j];
+                if (acc_2 == shape1[i]) {
+                    i--; j--;
+                    acc_2 = 0;
+                } else if(acc_2 < shape1[i]) {
+                    j--;
+                } else {
+                    printf("acc_2 = %d, shape[%d]=%ld\n", acc_2, i, shape1[i]);
+                    ERROR("Shape squeeze invalid!\n");
+                }
+            } else {
+                ERROR("Shape squeeze invalid!\n");
+            }
+        }
+    }
+
+    return i < 0 && j < 0; 
 }
 
 bool isBroadcast(DimVector& shape1, DimVector& shape2) {
@@ -363,7 +463,7 @@ DimVector getMatmulShape(DimVector& shape1, DimVector& shape2) {
             }
         }
     } else {
-        perror("Not implemented!");
+        ERROR("Not implemented!");
     }
     return {};
 }
@@ -390,7 +490,7 @@ DimVector getBatchMatmulShape(DimVector& shape1, DimVector& shape2) {
             }
         }
     } else {
-        perror("Not implemented!");
+        ERROR("Not implemented!");
     }
     return {};
 }

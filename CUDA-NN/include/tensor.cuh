@@ -2,7 +2,8 @@
 #ifndef TENSOR_H
 #define TENSOR_H
 
-#include "kernels/kernels.cuh"
+#include "kernels.cuh"
+#include<assert.h>
 #include<iostream>
 #include<vector>
 #include<algorithm>
@@ -20,7 +21,7 @@ class Tensor {
         DimVector shape;
 
     public:
-        Tensor(DimVector& shape);
+        Tensor(DimVector& shape, InitType init_type = RANDOM);
         Tensor(float *h_data, DimVector& shape);
         ~Tensor();
 
@@ -35,7 +36,7 @@ class Tensor {
         // set value
         void initialize(float value);
         void initialize(InitType type);
-        void initialize(float *h_data, DimVector shape);
+        void initialize(float *h_data, DimVector& shape);
 
         void squeeze();
         void squeeze(int idx);
@@ -43,10 +44,12 @@ class Tensor {
         // self transform
         // void transpose(size_t d1, size_t d2);
         void transpose();
-        // void reshape(size_t *n_shape, size_t n_dim);
+        void reshape(DimVector& n_shape);
 
         // Unary op
         void scale_(float factor);
+        void add_(float c);
+        void sub_(float c);
         // Tensor* scale(float factor);
         float sum();
         float mean();

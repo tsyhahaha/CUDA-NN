@@ -1,31 +1,37 @@
-#include "layers/linear.cuh"
-#include "tensor/tensor.cuh"
-#include "common/utils.cuh"
+#include "layers.cuh"
+#include "tensor.cuh"
+#include "utils.cuh"
 
-void test_linear() {
-    size_t in_features = 3, out_features = 3;
-    Linear* nn = new Linear(in_features, out_features, false, IDENTITY);
+void test_conv1d() {
+    const char* path = "/home/taosiyuan/cudaCode/CUDA-NN/data/bn1.weight.txt";
+    float* h_o;
 
-    size_t B = 8;
-    DimVector shape = {B, 3};
-    Tensor* x = new Tensor(shape);
-    x->initialize(RANDOM);
+    size_t in_channels = 3, out_channels = 8;
+    size_t B = 2, N = 2;
 
-    float* h_x = x->toHost();
-    printf("h_x(%ldx%ld):\n", shape[0], shape[1]);
-    print_M(h_x, shape);
+    // weight
+    DimVector shape1 = {out_channels, in_channels};
+    float* h_d1 = loadWeights(path, shape1[0], shape1[1]);
 
-    Tensor* out = nn->forward(x);
+    // bias
+    DimVector shape2 = {out_channels};
+    float* h_d2 = loadWeights(path, shape2[0], 1);
 
-    float* h_o = out->toHost();
-    printf("Linear(%ldx%ld) @ input(%ldx%ld)\n", in_features, out_features, shape[0], shape[1]);
-    print_M(h_o, out->getShape());
+    Conv1d* nn = new Conv1d(in_channels, out_channels, 1);
 
+    nn->load_weights(h_d1, h_d2, shape1, shape2);
+
+    DimVector shape_in = {B, B, in_channels};
+    Tensor* input = new Tensor(shape_in, RANDOM);
+
+    Tensor* o = nn->forward(input);
+    h_o = o->toHost();
+
+    printf("Conv1d->forward:\n");
+    print_M(h_o, o->getShape());
 }
 
 
-
 int main() {
-    test_linear();
-    // test_mul();
+    test_conv1d();
 }

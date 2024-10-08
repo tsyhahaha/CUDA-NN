@@ -5,18 +5,21 @@
 
 #include <assert.h>
 #include <stdio.h>
-#include "../../common/utils.cuh"
+#include "utils.cuh"
+#include "configure.cuh"
 
-#define BLOCK_SIZE1D 16
+/* Layer specific kernels*/
 
-#define BLOCK_SIZE2D 4  
-// less than the minimum value of the column and column of the matrix involved in the calculation
-#define TILE_SIZE 2
+__global__
+void kReLu1D(float* A, float* d_out, int N);
+
+__global__
+void kReLu2D(float* A, float* d_out, int M, int N);
 
 /* Tensor specific */
 
 __global__
-void kScale(float *d_data, float factor, size_t N);
+void kScale(float *d_data, float factor, float offset, size_t N);
 
 __global__ 
 void kSum(float *d_M, float *d_out, int N);

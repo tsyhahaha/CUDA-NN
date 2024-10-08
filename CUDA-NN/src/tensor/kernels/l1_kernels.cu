@@ -1,6 +1,5 @@
 #include "kernels.cuh"
 
-
 __global__
 void kAdd_l1(
     float *d_A, float *d_B, float *d_out, int M, float f1, float f2
