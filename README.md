@@ -1,21 +1,21 @@
 # CUDA-NN
-some learning code, simple reproduction and complex implementation about neural network
+Some learning code, simple reproduction in python and comprehensive implementation in CUDA of neural network.
 
-* Code for CUDA learner to get started.
-* Simple implementation of [PointNet](https://arxiv.org/abs/1612.00593).
-* Implementation of tensor, layers and PointNet in CUDA. Training and inference code of PointNet in CUDA.
+* Basic code for CUDA learner to get started.
+* Simple python implementation of [PointNet](https://arxiv.org/abs/1612.00593).
+* Implementation of tensor, layers and PointNet model in CUDA. Training and inference code of PointNet in CUDA.
 
 ## Basic Code for CUDA
 Including 3 main parts:
-* Matmul: the base version of matrix multiplication and several optimized version.
-* Reduce: versions of matrix sum operatoin.
-* Transpose: Basic and optimized version of matrix transpose.
+* Matmul: the base version of matrix multiplication and several optimized versions.
+* Reduce: versions of sum operatoin on matrix.
+* Transpose: basic and optimized version of matrix transpose.
 
-Most of optimization are concentrated on the following perspective:
-* Shared memory: tiling tech, avoid discrete reading and other aspects of optim in w/r.
+Most of optimizations concentrate on the following perspective:
+* Shared memory: tiling tech, optim in w/r like avoiding discrete reading.
 * Rigister memory: increase the ratio of computation and memory access to enhance FLOPS.
-* Bank conflict: avoid bank conflict which caused by reading mode of shared memory.
-* [TODO] Memory access acceleration: float4 reading.
+* Bank conflict: avoid bank conflict caused by shared memory.
+* [TODO] Memory access acceleration: float4 reading ......
 
 To run the start code:
 ```
@@ -32,8 +32,8 @@ Helpful reference:
 * [CUDA 矩阵转置优化](https://code.hitori.moe/post/cuda-transpose-optimization/)
 * [how-to-optim-algorithm-in-cuda](https://github.com/BBuf/how-to-optim-algorithm-in-cuda)
 
-## Simple implementation of PointNet
-Containing code used for PointNet's training in single GPU.
+## Simple implementation of PointNet in Python
+Containing code used for model impl and training of PointNet in single GPU.
 
 To run:
 ```
@@ -41,7 +41,7 @@ cd CUDA-NN/python
 python train.py
 ```
 
-[TODO] Optimize the structure of PointNet||training to improve the accuracy.
+[TODO] Optimize the structure of PointNet or training to improve the accuracy.
 
 ## [TODO]Implementation of NN in CUDA
 As a big assignment for the UCAS GPU course, we were asked to use CUDA to implement PointNet inference and training, and were required to have certain performance in accuracy and speed. This might be a pefect project to practice CUDA with.

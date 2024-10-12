@@ -1,3 +1,9 @@
 *.o
+test.*
+
 bin/
 build/
+.vscode/
+.VSCodeCounter/
+__pycache__/
+logs/
