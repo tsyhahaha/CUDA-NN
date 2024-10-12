@@ -6,16 +6,20 @@ void setGPU(const int GPU_idx){
     CHECK(cudaSetDevice(GPU_idx));
 }
 
-float* loadWeights(
-    const char* filename, int m, int n
-) {
-    int nBytes = m * n * sizeof(float);
-    FILE* file = fopen(filename, "r");
 
+float* loadWeightsFromTxt(const char* filename, std::vector<size_t> shape) {
+    FILE* file = fopen(filename, "r");
     if (file == NULL) {
         perror("Error opening file");
         return NULL;
     }
+
+    int dim = shape.size();
+    size_t n_data = 1;
+    for(size_t s: shape) {
+        n_data *= s;
+    }
+    int nBytes = n_data * sizeof(float);
 
     float *matrix = (float *) malloc(nBytes);
 
@@ -25,20 +29,47 @@ float* loadWeights(
         return NULL;
     }
 
-    for (int i=0; i<m; i++) {
-        for (int j=0; j<n; j++) {
-            if(fscanf(file, "%f", &matrix[i*n + j]) != 1) {
+
+    if(dim == 1) {
+        for (int i=0; i<shape[0]; i++) {
+            if(fscanf(file, "%f", &matrix[i]) != 1) {
                 free(matrix);
                 fclose(file);
                 return NULL;
             }
         }
+    }else if(dim == 2) {
+        for (int i=0; i<shape[0]; i++) {
+            for (int j=0; j<shape[1]; j++) {
+                if(fscanf(file, "%f", &matrix[i*shape[1] + j]) != 1) {
+                    free(matrix);
+                    fclose(file);
+                    return NULL;
+                }
+            }
+        }
+    } else if(dim == 3) {
+        for (int i=0; i<shape[0]; i++) {
+            for (int j=0; j<shape[1]; j++) {
+                for(int k=0; k<shape[2]; k++) {
+                    if(fscanf(file, "%f", &matrix[i*shape[1]*shape[2] + j*shape[2] + k]) != 1) {
+                        free(matrix);
+                        fclose(file);
+                        return NULL;
+                    }
+                }
+            }
+        }
+    } else {
+        ERROR("Dimension Error!");
     }
+
     fclose(file);
     return matrix;
 }
 
-void print_M(float* weight, const std::vector<size_t>& shape) {
+void printM(float* weight, const std::vector<size_t> shape) {
+    printShape(shape);
     int dim = shape.size();
     if (weight == NULL) {
         printf("print_M: Matrix is NULL\n");
@@ -75,6 +106,14 @@ void print_M(float* weight, const std::vector<size_t>& shape) {
         printf("print_M: dim > 3 not implemented!");
         exit(0);
     }
+}
+
+void printShape(std::vector<size_t> shape) {
+    printf("shape: (");
+    for(int i=0; i<shape.size() - 1; i++) {
+        printf("%ld ", shape[i]);
+    }
+    printf("%ld)\n", shape[shape.size()-1]);
 }
 
 

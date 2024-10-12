@@ -9,23 +9,25 @@
 #include "base.cuh"
 
 
+/* 
+https://pytorch.org/docs/stable/generated/torch.nn.Linear.html 
+torch.nn.Linear(in_features, out_features, bias=True, device=None, dtype=None)
+*/
 class Linear: public BaseLayer {
     private:
         int in_features;
         int out_features; 
 
-        Tensor* weight;
-        Tensor* bias;
+        Tensor* weights; // (out_features, in_features)
+        Tensor* bias;   // (out_features)
         
-        Tensor* input;    // saved for backward
-        Tensor* output;
-        Tensor* outputBackward;
+        Tensor* input=nullptr;      // (*, in_features)
+        Tensor* output=nullptr;     // (*, out_features)
+        Tensor* outputBackward=nullptr;
 
     public:
-        Linear(size_t in_features, size_t out_features, bool bias, InitType init_type);
-
-        void load_weights(float *h_data, DimVector shape, const std::string& target);
-        void load_weights(float *h_weight_data, float *h_bias_data, DimVector weight_shape, DimVector bias_shape);
+        Linear(size_t in_features, size_t out_features, bool bias=true, InitType init_type=KAIMING);
+        ~Linear();
 
         Tensor* forward(Tensor* data);
         Tensor* backward(Tensor* gradients);

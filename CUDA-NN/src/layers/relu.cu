@@ -36,6 +36,10 @@ ReLU::ReLU(bool inplace) {
     this->outputBackward = nullptr;
 }
 
+ReLU::~ReLU() {
+    delete input, output, outputBackward;
+}
+
 Tensor* ReLU::forward(Tensor* data) {
     this->input = data;
 
