@@ -3,6 +3,7 @@
 #define TENSOR_H
 
 #include "kernels.cuh"
+#include<math.h>
 #include<assert.h>
 #include<iostream>
 #include<vector>
@@ -21,8 +22,8 @@ class Tensor {
         DimVector shape;
 
     public:
-        Tensor(DimVector& shape, InitType init_type = RANDOM);
-        Tensor(float *h_data, DimVector& shape);
+        Tensor(DimVector shape, InitType init_type = RANDOM);
+        Tensor(float *h_data, DimVector shape);
         ~Tensor();
 
         // getters
@@ -40,19 +41,24 @@ class Tensor {
 
         void squeeze();
         void squeeze(int idx);
+        void unsqueeze(int idx = 0);
 
         // self transform
-        // void transpose(size_t d1, size_t d2);
+        void transpose(int d1, int d2);
         void transpose();
-        void reshape(DimVector& n_shape);
+        void reshape(DimVector n_shape);
+        void flatten();
 
         // Unary op
         void scale_(float factor);
+        void sqrt_();
         void add_(float c);
         void sub_(float c);
         // Tensor* scale(float factor);
         float sum();
         float mean();
+        Tensor* max(int dim, bool keepDim=true);
+        void max_(int dim, bool keepDim=true);
         // Tensor* sum(size_t d);
         // Tensor* mean(size_t d);
 
@@ -60,9 +66,12 @@ class Tensor {
         Tensor* add(Tensor* tensor);
         Tensor* sub(Tensor* tensor);
         Tensor* matmul(Tensor* tensor);
+        Tensor* dot(Tensor* tensor, float factor = 1.0f);
+        Tensor* div(Tensor* tensor, float factor = 1.0f);
         Tensor* bmm(Tensor* tensor);
     private:
         Tensor* saxpy(Tensor* tensor, float f1, float f2);
+        Tensor* saxpy_plus(Tensor* tensor, float factor, int flag);
         // Tensor* saxpy_(Tensor* tensor, float f1, float f2);
 };
 

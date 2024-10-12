@@ -36,9 +36,11 @@ do \
 
 void setGPU(const int GPU_idx);
 
-float* loadWeights(const char* filename, int m, int n);
+float* loadWeightsFromTxt(const char* filename, std::vector<size_t> shape);
 
-void print_M(float* weight, const std::vector<size_t>& shape);
+void printShape(std::vector<size_t> shape);
+
+void printM(float* weight, const std::vector<size_t> shape);
 
 float randomFloat(float a, float b);
 
