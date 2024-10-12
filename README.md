@@ -43,10 +43,10 @@ python train.py
 
 [TODO] Optimize the structure of PointNet or training to improve the accuracy.
 
-## [TODO]Implementation of NN in CUDA
+## [TODO]Implementation of PointNet in CUDA
 As a big assignment for the UCAS GPU course, we were asked to use CUDA to implement PointNet inference and training, and were required to have certain performance in accuracy and speed. This might be a pefect project to practice CUDA with.
 
-To run the project:
+In this project, layers and sub-modules in PointNet are implemented in `CUDA-NN/src`, to run the project:
 ```
 cd CUDA-NN/CUDA-NN
 mkdir build
