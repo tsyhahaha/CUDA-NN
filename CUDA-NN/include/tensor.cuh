@@ -56,11 +56,13 @@ class Tensor {
         void sub_(float c);
         // Tensor* scale(float factor);
         float sum();
+        Tensor* sum(int dim);
         float mean();
         Tensor* max(int dim, bool keepDim=true);
         void max_(int dim, bool keepDim=true);
         // Tensor* sum(size_t d);
         // Tensor* mean(size_t d);
+        Tensor* exp();
 
         // Binary op
         Tensor* add(Tensor* tensor);

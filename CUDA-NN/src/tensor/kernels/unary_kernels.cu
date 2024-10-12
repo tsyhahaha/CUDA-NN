@@ -39,6 +39,69 @@ void kMaxLastDim3D(float* d_data, float* d_out, size_t N, size_t C, size_t L
 }
 
 __global__
+void kMaxLastDim2D(float* d_data, float* d_out, size_t C, size_t L
+) {
+    // It'll be faster if blocksize is the factor of L.
+    int x = blockIdx.x;
+    int tid = threadIdx.x;
+
+    __shared__ float sd_M[BLOCK_SIZE1D];
+    float cur_max = 0.0f;
+
+    int iter = (L-1)/BLOCK_SIZE1D + 1;
+    for(int i=0; i<iter; i++) {
+        if (i*BLOCK_SIZE1D + tid < L) {
+            sd_M[tid] = d_data[x*L + i*BLOCK_SIZE1D + tid];
+        }
+        __syncthreads();
+
+        // reduce max and save to `cur_max`
+        for(int stride=blockDim.x/2; stride>0; stride>>=1) {
+            if(tid < stride && tid + stride + i*BLOCK_SIZE1D < L) {
+                sd_M[tid] = sd_M[tid] > sd_M[tid + stride]? sd_M[tid] : sd_M[tid+stride];
+            }
+            __syncthreads();
+        }
+        cur_max = cur_max >= sd_M[0] ? cur_max : sd_M[0];
+    }
+
+
+    if (tid==0 && x < C)
+        d_out[x] = cur_max;
+}
+
+__global__
+void kSumLastDim2D(float* d_data, float* d_out, size_t C, size_t L
+) {
+    // It'll be faster if blocksize is the factor of L.
+    int x = blockIdx.x;
+    int tid = threadIdx.x;
+
+    __shared__ float sd_M[BLOCK_SIZE1D];
+    float cVal = 0.0f;
+
+    int iter = (L-1)/BLOCK_SIZE1D + 1;
+    for(int i=0; i<iter; i++) {
+        if (i*BLOCK_SIZE1D + tid < L) {
+            sd_M[tid] = d_data[x*L + i*BLOCK_SIZE1D + tid];
+        }
+        __syncthreads();
+
+        for(int stride=blockDim.x/2; stride>0; stride>>=1) {
+            if(tid < stride && tid + stride + i*BLOCK_SIZE1D < L) {
+                sd_M[tid] = sd_M[tid] + sd_M[tid + stride];
+            }
+            __syncthreads();
+        }
+        cVal =  cVal + sd_M[0];
+    }
+
+
+    if (tid==0 && x < C)
+        d_out[x] = cVal;
+}
+
+__global__
 void kTransposeLast3D(float* d_data, float* d_out, size_t N, size_t m, size_t n
 ){
     __shared__ float sd_M[BLOCK_SIZE2D][BLOCK_SIZE2D];
@@ -152,7 +215,14 @@ void kTranspose(float* d_M, float* d_out, int m, int n) {
 }
 
 
+__global__
+void kExp(float* d_data, float* d_out, int n_data) {
+    int id = threadIdx.x + blockDim.x * blockIdx.x;
 
+    if (id >= n_data) return;
+
+    d_out[id] = expf(d_data[id]);
+}
 
 
 

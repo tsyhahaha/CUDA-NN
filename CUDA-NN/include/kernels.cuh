@@ -38,7 +38,15 @@ void kConv1d(float* d_in, float* d_out, float* weights, float* bias, int C_in, i
 /* unary op */
 
 __global__
+void kSumLastDim2D(float* d_data, float* d_out, size_t C, size_t L
+);
+
+__global__
 void kMaxLastDim3D(float* d_data, float* d_out, size_t N, size_t C, size_t L);
+
+__global__
+void kMaxLastDim2D(float* d_data, float* d_out, size_t C, size_t L
+);
 
 __global__
 void kScale(float *d_data, float factor, float offset, size_t N);
@@ -52,6 +60,9 @@ void kTranspose(float* d_M, float* d_out, int m, int n);
 __global__
 void kTransposeLast3D(float* d_data, float* d_out, size_t N, size_t m, size_t n
 );
+
+__global__
+void kExp(float* d_data, float* d_out, int n_data);
 
 /* add kernels */
 __global__

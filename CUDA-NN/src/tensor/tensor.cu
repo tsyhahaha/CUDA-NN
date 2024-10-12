@@ -222,6 +222,17 @@ void Tensor::scale_(float factor) {
     CHECK_KERNEL();
 }
 
+Tensor* Tensor::exp() {
+    DimVector shape_o = this->shape;
+    Tensor* tensor_o = new Tensor(shape_o);
+    int n_data = this->n_data;
+    int block = BLOCK_SIZE1D;
+    int grid = (n_data - 1)/BLOCK_SIZE1D + 1;
+
+    kExp<<<grid, block>>>(this->d_data, tensor_o->d_data, n_data); CHECK_KERNEL();
+    return tensor_o;
+}
+
 // void Tensor::sqrt_() {
 //     dim3 block(BLOCK_SIZE1D);
 //     dim3 grid((this->n_data-1)/BLOCK_SIZE1D + 1);
@@ -259,6 +270,25 @@ float Tensor::sum(){
     CHECK(cudaFree(d_out));
     return *h_out;
 }
+
+Tensor* Tensor::sum(int dim){
+    int size = this->shape.size();
+    if(dim < 0) {
+        dim = dim + this->getDim();
+    }
+    if(size == 2 && dim == this->getDim() - 1) {
+        DimVector shape_o = this->shape;
+        Tensor* tensor_o = new Tensor(shape_o);
+        size_t C = shape[0], L = shape[1];
+        int block = BLOCK_SIZE1D;
+        int grid = (C-1)/BLOCK_SIZE1D + 1;
+        kSumLastDim2D<<<grid, block>>>(this->d_data, tensor_o->d_data, C, L);CHECK_KERNEL();
+        return tensor_o;
+    } else {
+        ERROR("Not implemented!\n");
+    }
+    return nullptr;
+}
  
 float Tensor::mean(){
     float s = sum();
@@ -287,6 +317,47 @@ void Tensor::max_(int dim, bool keepDim){
             ERROR("Not implementated!\n");
         }
     }
+}
+
+Tensor* Tensor::max(int dim, bool keepDim){
+    int size = this->shape.size();
+    if(dim < 0) {
+        dim = size + dim;
+    }
+
+    DimVector shape_o = this->shape;
+    Tensor* tensor_o = new Tensor(shape_o);
+
+    if(dim < size) {
+        DEBUG_PRINT("size=%d, dim=%d\n", size, dim);
+        if(size == 3 && dim==size-1) {
+            size_t N=this->shape[0], C=this->shape[1], L=this->shape[2];
+            int block = BLOCK_SIZE1D;   // BLOCK_SIZE could be larger
+            dim3 grid(C, N);
+            kMaxLastDim3D<<<grid, block>>>(this->d_data, tensor_o->d_data, N, C, L); CHECK_KERNEL();
+
+            tensor_o->shape[dim] = 1;
+            if(!keepDim) {
+                tensor_o->shape.erase(shape.begin() + dim);
+            }
+            return tensor_o;
+        } else if(size == 2 && dim==size-1) {
+            size_t C=this->shape[0], L=this->shape[1];
+            int block = BLOCK_SIZE1D;   // BLOCK_SIZE could be larger
+            int grid = (C-1)/BLOCK_SIZE1D + 1;
+
+            kMaxLastDim2D<<<grid, block>>>(this->d_data, tensor_o->d_data, C, L); CHECK_KERNEL();
+
+            tensor_o->shape[dim] = 1;
+            if(!keepDim) {
+                tensor_o->shape.erase(shape.begin() + dim);
+            }
+            return tensor_o;
+        } else {
+            ERROR("Not implementated!\n");
+        }
+    }
+    return nullptr;
 }
 
 
