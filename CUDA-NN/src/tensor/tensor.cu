@@ -37,6 +37,16 @@ Tensor::~Tensor(){
     CHECK(cudaFree(this->d_data));
 }
 
+void Tensor::fromVec(std::vector<float>& vec) {
+    printShape(this->shape);
+    if(vec.size() != this->n_data) {
+        ERROR("Weight size not matched!\n");
+    }
+    DEBUG_PRINT("n_data = %ld, vec.size() = %ld\n", n_data, vec.size());
+    float* h_data = vec.data();
+    CHECK(cudaMemcpy(this->d_data, h_data, this->n_data * sizeof(float), cudaMemcpyHostToDevice));
+}
+
 /* getters */
 
 size_t Tensor::getDim() {
@@ -422,9 +432,6 @@ Tensor* Tensor::saxpy(Tensor* tensor, float f1, float f2) {
             int z = shape_o[0], y = shape_o[1], x = shape_o[2];
             dim3 grid((x-1)/BLOCK_SIZE3D+1, (y-1)/BLOCK_SIZE3D+1, (z-1)/BLOCK_SIZE3D+1);
 
-            printShape(stride1);
-            printShape(stride2);
-
             // e.x. shape1: (B x N), shape2: (N) or else
             int s11 = stride1[0], s12 = stride1[1], s13 = stride1[2];
             int s21 = stride2[0], s22 = stride2[1], s23 = stride2[2];
@@ -491,9 +498,6 @@ Tensor* Tensor::saxpy_plus(Tensor* tensor, float factor, int flag) {
             dim3 block(BLOCK_SIZE3D, BLOCK_SIZE3D, BLOCK_SIZE3D);
             int z = shape_o[0], y = shape_o[1], x = shape_o[2];
             dim3 grid((x-1)/BLOCK_SIZE3D+1, (y-1)/BLOCK_SIZE3D+1, (z-1)/BLOCK_SIZE3D+1);
-
-            printShape(stride1);
-            printShape(stride2);
 
             // e.x. shape1: (B x N), shape2: (N) or else
             int s11 = stride1[0], s12 = stride1[1], s13 = stride1[2];
@@ -592,7 +596,7 @@ Tensor* Tensor::bmm(Tensor* tensor) {
 
     kBatchMatmul3D<<<grid, block>>>(this->d_data, tensor->d_data, tensor_o->d_data, bz, M, N, K); CHECK_KERNEL();
 
-    printShape(tensor_o->getShape());
+    // printShape(tensor_o->getShape());
 
     return tensor_o;
 }

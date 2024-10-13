@@ -47,10 +47,12 @@ void kConv1d(float* d_in, float* d_out, float* weights, float* bias, int C_in, i
 }
 
 
-Conv1d::Conv1d(size_t in_channels, size_t out_channels, size_t kernel_size, bool bias) {
+Conv1d::Conv1d(std::string prefix, size_t in_channels, size_t out_channels, size_t kernel_size, bool bias) {
     this->in_channels = in_channels;
     this->out_channels = out_channels;
     this->kernel_size = this->kernel_size;
+
+    this->prefix = prefix;
 
     if(kernel_size != 1) {
         perror("Not implemented!");
@@ -66,11 +68,6 @@ Conv1d::Conv1d(size_t in_channels, size_t out_channels, size_t kernel_size, bool
 
 Conv1d::~Conv1d() {
     delete weights, bias, input, output, outputBackward;
-}
-
-void Conv1d::load_weights(float *h_weights_data, float *h_bias_data, DimVector weights_shape, DimVector bias_shape) {
-    this->weights->initialize(h_weights_data, weights_shape);        
-    this->bias->initialize(h_bias_data, bias_shape);
 }
 
 /*

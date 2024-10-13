@@ -1,20 +1,22 @@
 #include "stn3d.cuh"
 
-STN3d::STN3d(size_t channel) {
-    this->conv1 = new Conv1d(channel, 64, 1);
-    this->conv2 = new Conv1d(64, 128, 1);
-    this->conv3 = new Conv1d(128, 1024, 1);
+STN3d::STN3d(std::string prefix, size_t channel) {
+    this->prefix = prefix;
+    
+    this->conv1 = new Conv1d(this->prefix + "conv1.", channel, 64, 1);
+    this->conv2 = new Conv1d(this->prefix + "conv2.", 64, 128, 1);
+    this->conv3 = new Conv1d(this->prefix + "conv3.", 128, 1024, 1);
 
-    this->fc1 = new Linear(1024, 512);
-    this->fc2 = new Linear(512, 256);
-    this->fc3 = new Linear(256, 9);
-    this->relu = new ReLU();
+    this->fc1 = new Linear(this->prefix + "fc1.", 1024, 512);
+    this->fc2 = new Linear(this->prefix + "fc2.", 512, 256);
+    this->fc3 = new Linear(this->prefix + "fc3.", 256, 9);
+    this->relu = new ReLU(this->prefix + "relu.");
 
-    this->bn1 = new BatchNorm1d(64);
-    this->bn2 = new BatchNorm1d(128);
-    this->bn3 = new BatchNorm1d(1024);
-    this->bn4 = new BatchNorm1d(512);
-    this->bn5 = new BatchNorm1d(256);
+    this->bn1 = new BatchNorm1d(this->prefix + "bn1.", 64);
+    this->bn2 = new BatchNorm1d(this->prefix + "bn2.", 128);
+    this->bn3 = new BatchNorm1d(this->prefix + "bn3.", 1024);
+    this->bn4 = new BatchNorm1d(this->prefix + "bn4.", 512);
+    this->bn5 = new BatchNorm1d(this->prefix + "bn5.", 256);
 }
 
 STN3d::~STN3d() {
@@ -22,7 +24,19 @@ STN3d::~STN3d() {
 }
 
 void STN3d::load_weights() {
-    ;
+    this->conv1->load_weights();
+    this->conv2->load_weights();
+    this->conv3->load_weights();
+
+    this->fc1->load_weights();
+    this->fc2->load_weights();
+    this->fc3->load_weights();
+
+    this->bn1->load_weights();
+    this->bn2->load_weights();
+    this->bn3->load_weights();
+    this->bn4->load_weights();
+    this->bn5->load_weights();
 }
 
 Tensor* STN3d::forward(Tensor* data) {

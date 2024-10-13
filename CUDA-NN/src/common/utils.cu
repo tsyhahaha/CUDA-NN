@@ -6,7 +6,6 @@ void setGPU(const int GPU_idx){
     CHECK(cudaSetDevice(GPU_idx));
 }
 
-
 float* loadWeightsFromTxt(const char* filename, std::vector<size_t> shape) {
     FILE* file = fopen(filename, "r");
     if (file == NULL) {
@@ -109,11 +108,12 @@ void printM(float* weight, const std::vector<size_t> shape) {
 }
 
 void printShape(std::vector<size_t> shape) {
-    printf("shape: (");
+    std::string s = "shape: (";
     for(int i=0; i<shape.size() - 1; i++) {
-        printf("%ld ", shape[i]);
+        s += std::to_string(shape[i]);
     }
-    printf("%ld)\n", shape[shape.size()-1]);
+    s += std::to_string(shape[shape.size()-1]) + ")";
+    DEBUG_PRINT("%s\n", s.c_str());
 }
 
 

@@ -25,6 +25,7 @@ class Tensor {
         Tensor(DimVector shape, InitType init_type = RANDOM);
         Tensor(float *h_data, DimVector shape);
         ~Tensor();
+        void fromVec(std::vector<float>& vec);
 
         // getters
         size_t getDim();

@@ -1,7 +1,8 @@
 #include "softmax.cuh"
 
-SoftMax::SoftMax(size_t dim) {
+SoftMax::SoftMax(std::string prefix, size_t dim) {
     this->dim = dim;
+    this->prefix = prefix;
 }
 
 Tensor* SoftMax::forward(Tensor* data) {

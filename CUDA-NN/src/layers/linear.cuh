@@ -18,15 +18,15 @@ class Linear: public BaseLayer {
         int in_features;
         int out_features; 
 
-        Tensor* weights; // (out_features, in_features)
-        Tensor* bias;   // (out_features)
+        // Tensor* weights; // (out_features, in_features)
+        // Tensor* bias;   // (out_features)
         
-        Tensor* input=nullptr;      // (*, in_features)
-        Tensor* output=nullptr;     // (*, out_features)
-        Tensor* outputBackward=nullptr;
+        // Tensor* input=nullptr;      // (*, in_features)
+        // Tensor* output=nullptr;     // (*, out_features)
+        // Tensor* outputBackward=nullptr;
 
     public:
-        Linear(size_t in_features, size_t out_features, bool bias=true, InitType init_type=KAIMING);
+        Linear(std::string prefix, size_t in_features, size_t out_features, bool bias=true, InitType init_type=KAIMING);
         ~Linear();
 
         Tensor* forward(Tensor* data);

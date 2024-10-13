@@ -1,10 +1,11 @@
 #ifndef POINTNET_H
 #define POINTNET_H
 
+#include "configure.cuh"
+
 #include "module.cuh"
 #include "tensor.cuh"
 #include "layers.cuh"
-
 #include "encoder.cuh"
 
 class PointNet: public Module {
@@ -20,7 +21,7 @@ class PointNet: public Module {
         ReLU* relu;
 
     public:
-        PointNet(size_t k=10, bool normal_channel=false);
+        PointNet(std::string prefix="", size_t k=10, bool normal_channel=false);
         ~PointNet();
 
         void load_weights();

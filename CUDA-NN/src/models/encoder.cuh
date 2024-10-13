@@ -24,7 +24,7 @@ class Encoder: public Module {
         ReLU* relu;
 
     public:
-        Encoder(bool global_feat = true, bool feature_transform = false, size_t channel = 3);
+        Encoder(std::string prefix, bool global_feat = true, bool feature_transform = false, size_t channel = 3);
         ~Encoder();
 
         void load_weights();

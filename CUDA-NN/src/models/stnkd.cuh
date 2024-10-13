@@ -23,7 +23,7 @@ class STNkd: public Module {
         BatchNorm1d* bn5;
 
     public:
-        STNkd(size_t k);
+        STNkd(std::string prefix, size_t k);
         ~STNkd();
 
         void load_weights();

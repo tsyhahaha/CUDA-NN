@@ -16,18 +16,16 @@ class Conv1d: public BaseLayer {
         size_t out_channels;        // num kernels
         size_t kernel_size;         // ks == 1 in PointNet
 
-        Tensor* weights;         // (C_out x C_in) each col -> each kernel
-        Tensor* bias;            // (C_out)
+        // Tensor* weights;         // (C_out x C_in) each col -> each kernel
+        // Tensor* bias;            // (C_out)
 
-        Tensor* input=nullptr;      // (N, C_in, L_in) or (C_in, L_in)
-        Tensor* output=nullptr;     // (N, C_out, L_in) or (C_out, L_in) if ks = 1
-        Tensor* outputBackward=nullptr;
+        // Tensor* input=nullptr;      // (N, C_in, L_in) or (C_in, L_in)
+        // Tensor* output=nullptr;     // (N, C_out, L_in) or (C_out, L_in) if ks = 1
+        // Tensor* outputBackward=nullptr;
 
     public:
-        Conv1d(size_t in_channels, size_t out_channels, size_t kernel_size, bool bias = true);
+        Conv1d(std::string prefix, size_t in_channels, size_t out_channels, size_t kernel_size, bool bias = true);
         ~Conv1d();
-
-        void load_weights(float *h_weights_data, float *h_bias_data, DimVector weights_shape, DimVector bias_shape);
 
         Tensor* forward(Tensor* data);
         Tensor* backward(Tensor* gradients);

@@ -35,6 +35,13 @@ void kBn1d_l3(float* d_data, float* d_out, float* weights, float* bias,
     d_out[z*C*L + y*L + x] = norm * weights[y] + bias[y];
 }
 
+void BatchNorm1d::load_weights() {
+    this->weights->fromVec(Configurer::getWeights(this->prefix + "weight"));
+    this->bias->fromVec(Configurer::getWeights(this->prefix + "bias"));
+    this->running_mean->fromVec(Configurer::getWeights(this->prefix + "running_mean"));
+    this->running_var->fromVec(Configurer::getWeights(this->prefix + "running_var"));
+}
+
 void BatchNorm1d::load_weights(float *h_weights_data, float *h_bias_data, DimVector weights_shape, DimVector bias_shape) {
     this->weights->initialize(h_weights_data, weights_shape);        
     this->bias->initialize(h_bias_data, bias_shape);
@@ -56,12 +63,14 @@ void BatchNorm1d::load_weights(float *h_data, DimVector shape, const std::string
     }
 }
 
-BatchNorm1d::BatchNorm1d(size_t num_features, float eps, float monmentum, bool affine, bool track_running_stats) {
+BatchNorm1d::BatchNorm1d(std::string prefix, size_t num_features, float eps, float monmentum, bool affine, bool track_running_stats) {
     this->num_features = num_features;
     this->eps = eps;
     this->momentum = monmentum;
     this->affine = affine;
     this->track_running_stats = track_running_stats;
+
+    this->prefix = prefix;
 
     if(affine) {
         this->weights = new Tensor({num_features}, ONES);

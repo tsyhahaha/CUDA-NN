@@ -1,27 +1,38 @@
 #include "encoder.cuh"
 
-Encoder::Encoder(bool global_feat, bool feature_transform, size_t channel) {
+Encoder::Encoder(std::string prefix, bool global_feat, bool feature_transform, size_t channel) {
     this->global_feat = global_feat;
     this->feature_transform = feature_transform;
     this->channel = channel;
 
-    this->stn = new STN3d(channel);
-    this->conv1 = new Conv1d(channel, 64, 1);
-    this->conv2 = new Conv1d(64, 128, 1);
-    this->conv3 = new Conv1d(128, 1024, 1);
-    this->bn1 = new BatchNorm1d(64);
-    this->bn2 = new BatchNorm1d(128);
-    this->bn3 = new BatchNorm1d(1024);
-    this->relu = new ReLU();
+    this->prefix = prefix;
+
+    this->stn = new STN3d(this->prefix + "stn.", channel);
+    this->conv1 = new Conv1d(this->prefix + "conv1.", channel, 64, 1);
+    this->conv2 = new Conv1d(this->prefix + "conv1.", 64, 128, 1);
+    this->conv3 = new Conv1d(this->prefix + "conv1.", 128, 1024, 1);
+    this->bn1 = new BatchNorm1d(this->prefix + "bn1.", 64);
+    this->bn2 = new BatchNorm1d(this->prefix + "bn2.", 128);
+    this->bn3 = new BatchNorm1d(this->prefix + "bn3.", 1024);
+    this->relu = new ReLU(this->prefix + "relu.");
 
     if(feature_transform) {
-        fstn = new STNkd(64);
+        fstn = new STNkd(this->prefix + "fstn.", 64);
     }
-
 }
 
 Encoder::~Encoder() {
     delete stn, conv1, conv2, conv3, bn1, bn2, bn3, relu;
+}
+
+void Encoder::load_weights() {
+    this->stn->load_weights();
+    this->conv1->load_weights();
+    this->conv2->load_weights();
+    this->conv3->load_weights();
+    this->bn1->load_weights();
+    this->bn2->load_weights();
+    this->bn3->load_weights();
 }
 
 Tensor* Encoder::forward(Tensor* data) {
@@ -42,8 +53,6 @@ Tensor* Encoder::forward(Tensor* data) {
         Tensor* f_trans = x->bmm(trans_feat);    // track f_trans
         x = f_trans;
         x->transpose(-1, -2);
-    } else {
-        Tensor* trans_feat = nullptr;
     }
 
 

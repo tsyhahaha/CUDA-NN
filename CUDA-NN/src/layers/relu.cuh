@@ -13,12 +13,8 @@ class ReLU: public BaseLayer {
     private:
         bool inplace;   // If true, input from this layer cannot be reused.
         
-        Tensor* input=nullptr;
-        Tensor* output=nullptr;
-        Tensor* outputBackward=nullptr;
-
     public:
-        ReLU(bool inplace = false);
+        ReLU(std::string prefix, bool inplace = false);
         ~ReLU();
 
         Tensor* forward(Tensor* data);

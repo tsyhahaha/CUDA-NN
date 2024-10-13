@@ -22,7 +22,7 @@ class STN3d: public Module {
         BatchNorm1d* bn5;
 
     public:
-        STN3d(size_t channel);
+        STN3d(std::string prefix, size_t channel);
         ~STN3d();
 
         void load_weights();

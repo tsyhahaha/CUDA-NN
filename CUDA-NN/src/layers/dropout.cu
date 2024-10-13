@@ -13,7 +13,7 @@ void kDropout1D(float* d_in, float* d_out, int N) {
     }
 }
 
-Dropout::Dropout(float p, bool inplace) {
+Dropout::Dropout(std::string prefix, float p, bool inplace) {
     this->p = p;
     this->inplace = inplace;
     this->input = nullptr;
@@ -21,6 +21,8 @@ Dropout::Dropout(float p, bool inplace) {
     // Prepare output for forward and backprop
     this->output = nullptr;
     this->outputBackward = nullptr;
+
+    this->prefix = prefix;
 }
 
 

@@ -1,6 +1,6 @@
 #include "linear.cuh"
 
-Linear::Linear(size_t in_features, size_t out_features, bool bias, InitType init_type) {
+Linear::Linear(std::string prefix, size_t in_features, size_t out_features, bool bias, InitType init_type) {
     this->in_features = in_features;
     this->out_features = out_features;
 
@@ -8,6 +8,8 @@ Linear::Linear(size_t in_features, size_t out_features, bool bias, InitType init
     this->weights = new Tensor(weights_shape);
 
     this->weights->initialize(init_type);
+
+    this->prefix = prefix;
     
     if(bias) {
         DimVector bias_shape = {out_features};
