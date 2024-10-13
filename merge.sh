@@ -1,5 +1,28 @@
 #!/bin/bash
 
+# 输出文件名
+output="merged.cu"
+
+# 清空输出文件
+> $output
+
+base="CUDA-NN/src"
+include_folder="CUDA-NN/include"
+
+if [ -z "$1" ]; then
+  echo "Usage: $0 <main|test>"
+  exit 1
+fi
+
+if [ "$1" == "main" ]; then
+  main_file="$base/main.cu"
+elif [ "$1" == "test" ]; then
+  main_file="$base/test.cu"
+else
+  echo "Invalid argument: $1. Use 'main' or 'test'."
+  exit 1
+fi
+
 should_add_line() {
     local line="$1"
 
@@ -23,14 +46,7 @@ should_add_line() {
     return 0  # 默认可以添加
 }
 
-# 输出文件名
-output="merged.cu"
 
-# 清空输出文件
-> $output
-
-base="CUDA-NN/src"
-include_folder="CUDA-NN/include"
 
 # 定义合并的顺序，将 kernels 文件夹放在最前面
 folders=("tensor/kernels" "common" "tensor" "layers" "models")
@@ -128,19 +144,14 @@ for folder in "${folders[@]}"; do
 done
 
 
-# 处理 main.cu ，不递归查找子文件夹
-for file in "$base/main.cu" ; do
-    echo "// Merging: $file" >> $output
-    last_line=""
-    while IFS= read -r line || [ -n "$line" ]; do
-        should_add_line "$line"
-        if [[ $? -eq 0 ]]; then
-            echo "$line" >> $output  # 添加行到输出文件
-        fi
-        last_line="$line"
-    done < "$file"
-    echo -e "\n" >> $output
-done
+echo "// Merging: $main_file" >> $output
+while IFS= read -r line || [ -n "$line" ]; do
+    should_add_line "$line"
+    if [[ $? -eq 0 ]]; then
+        echo "$line" >> $output  # 添加行到输出文件
+    fi
+done < "$main_file"
+echo -e "\n" >> $output
 
 
 temp_file=$(mktemp)
