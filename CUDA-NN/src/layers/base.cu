@@ -9,7 +9,6 @@ Tensor* BaseLayer::getBias() {
 }
 
 void BaseLayer::load_weights(float *h_weights_data, float *h_bias_data, DimVector weights_shape, DimVector bias_shape) {
-    printf("HERE: load_weights");
     this->weights->initialize(h_weights_data, weights_shape);        
     this->bias->initialize(h_bias_data, bias_shape);
 }

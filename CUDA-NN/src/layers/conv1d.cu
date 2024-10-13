@@ -3,7 +3,7 @@
 
 __global__
 void kConv1d(float* d_in, float* d_out, float* weights, float* bias, int C_in, int C_out, int L, int N) {
-    // kMatmulTransposed_l3: weights(C_out x C_in) @ d_in(C_in x L) + bias(C_out)= (C_out x L)
+    // kMatmulTransposed_l3: weights(C_out x C_in) @ d_in(B x C_in x L) + bias(C_out)= (B x C_out x L)
     float cVal = 0.0f;
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
@@ -14,7 +14,7 @@ void kConv1d(float* d_in, float* d_out, float* weights, float* bias, int C_in, i
 
     if (row >= C_out || col >= L) return;
 
-    ds_bias[blockIdx.y] = bias[row];
+    ds_bias[threadIdx.y] = bias[row];
 
     for(int b=0; b<N; b++) {
         // batch b
@@ -40,6 +40,7 @@ void kConv1d(float* d_in, float* d_out, float* weights, float* bias, int C_in, i
             }
             __syncthreads();
         }
+        // printf("d_out[%d][%d][%d] = %f\n", b, row, col, cVal);
         d_out[b*C_out*L + row*L + col] = cVal + ds_bias[threadIdx.y];
     }
 
