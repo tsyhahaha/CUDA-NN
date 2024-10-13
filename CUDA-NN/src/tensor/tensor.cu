@@ -40,7 +40,7 @@ Tensor::~Tensor(){
 void Tensor::fromVec(std::vector<float>& vec) {
     printShape(this->shape);
     if(vec.size() != this->n_data) {
-        ERROR("Weight size not matched!\n");
+        ERROR("%ld != %ld, weight size not matched!\n", vec.size(), this->n_data);
     }
     DEBUG_PRINT("n_data = %ld, vec.size() = %ld\n", n_data, vec.size());
     float* h_data = vec.data();
@@ -312,7 +312,7 @@ void Tensor::max_(int dim, bool keepDim){
     }
 
     if(dim < size) {
-        DEBUG_PRINT("size=%d, dim=%d\n", size, dim);
+        // DEBUG_PRINT("size=%d, dim=%d\n", size, dim);
         if(size == 3 && dim==size-1) {
             size_t N=this->shape[0], C=this->shape[1], L=this->shape[2];
             int block = BLOCK_SIZE1D;   // BLOCK_SIZE could be larger

@@ -13,7 +13,7 @@ PointNet::PointNet(std::string prefix, size_t k, bool normal_channel) {
     this->prefix = prefix;
 
     this->feat = new Encoder(this->prefix + "feat.", true, true, channel);
-    this->fc1 = new Linear(this->prefix + "fc1", 1024, 512);
+    this->fc1 = new Linear(this->prefix + "fc1.", 1024, 512);
     this->fc2 = new Linear(this->prefix + "fc2.", 512, 256);
     this->fc3 = new Linear(this->prefix + "fc3.", 256, k);
     this->dropout = new Dropout(this->prefix + "dropout.", 0.4);

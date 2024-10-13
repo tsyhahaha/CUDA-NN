@@ -11,7 +11,6 @@ void Configurer::set_global_weights(const std::map<std::string, std::vector<floa
 
 std::vector<float>& Configurer::getWeights(std::string name) {
     DEBUG_PRINT("loading %s(%ld)\n", name.c_str(), global_weight_map[name].size());
-
     return global_weight_map[name];
 }
 

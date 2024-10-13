@@ -9,8 +9,8 @@ Encoder::Encoder(std::string prefix, bool global_feat, bool feature_transform, s
 
     this->stn = new STN3d(this->prefix + "stn.", channel);
     this->conv1 = new Conv1d(this->prefix + "conv1.", channel, 64, 1);
-    this->conv2 = new Conv1d(this->prefix + "conv1.", 64, 128, 1);
-    this->conv3 = new Conv1d(this->prefix + "conv1.", 128, 1024, 1);
+    this->conv2 = new Conv1d(this->prefix + "conv2.", 64, 128, 1);
+    this->conv3 = new Conv1d(this->prefix + "conv3.", 128, 1024, 1);
     this->bn1 = new BatchNorm1d(this->prefix + "bn1.", 64);
     this->bn2 = new BatchNorm1d(this->prefix + "bn2.", 128);
     this->bn3 = new BatchNorm1d(this->prefix + "bn3.", 1024);

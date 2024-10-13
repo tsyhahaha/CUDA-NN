@@ -84,7 +84,7 @@ void test_params_load() {
 
     printf("load model done\n");
 
-    const char* path = "/home/taosiyuan/cudaCode/CUDA-NN/data/bn1.weight.txt";
+    const char* path = "/home/course/taosiyuan241/CUDA-NN/data/bn1.weight.txt";
     float* h_o;
 
     DimVector shape = {2, 3, 4};
