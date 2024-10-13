@@ -9,4 +9,4 @@
 #include "../src/layers/dropout.cuh"
 #include "../src/layers/softmax.cuh"
 
-#endif
+#endif /* !LAYERS_H */

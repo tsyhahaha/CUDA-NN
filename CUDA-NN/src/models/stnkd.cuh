@@ -32,4 +32,4 @@ class STNkd: public Module {
         Tensor* backward(Tensor* gradients);
 };
 
-#endif
+#endif /* !STNKD_H */

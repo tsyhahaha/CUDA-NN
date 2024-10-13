@@ -45,5 +45,5 @@ void printM(float* weight, const std::vector<size_t> shape);
 float randomFloat(float a, float b);
 
 int randomInt(int a, int b);
-#endif
+#endif /* !UTILS_H */
    

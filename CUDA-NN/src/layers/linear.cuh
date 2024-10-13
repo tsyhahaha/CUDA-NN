@@ -34,4 +34,4 @@ class Linear: public BaseLayer {
 
 };
 
-#endif
+#endif /* !LINEAR_H */

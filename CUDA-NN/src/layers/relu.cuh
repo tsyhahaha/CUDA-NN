@@ -25,4 +25,4 @@ class ReLU: public BaseLayer {
         Tensor* backward(Tensor* gradients);
 };
 
-#endif
+#endif /* !RELU_H */

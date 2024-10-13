@@ -166,4 +166,4 @@ void kBatchMatmul3D(
     float*d_A, float* d_B, float*d_out, int B, int M, int N, int K
 );
 
-#endif
+#endif /* !KERNELS_H */

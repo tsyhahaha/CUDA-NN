@@ -25,4 +25,4 @@ class BaseLayer {
         // virtual Tensor* backward(Tensor* gradients) = 0;
 };
 
-#endif
+#endif /* !BASE_H */

@@ -6,4 +6,4 @@
 #include "../src/models/encoder.cuh"
 #include "../src/models/pointnet.cuh"
 
-#endif
+#endif /* !MODELS_H */

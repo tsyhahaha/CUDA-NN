@@ -14,4 +14,4 @@ class Module {
 };
 
 
-#endif
+#endif /* !MODULE_H */

@@ -21,4 +21,4 @@ class SoftMax: public BaseLayer {
 
 };
 
-#endif
+#endif /* !SFM_H */

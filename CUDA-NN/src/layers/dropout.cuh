@@ -25,4 +25,4 @@ class Dropout: public BaseLayer {
         Tensor* backward(Tensor* gradients);
 };
 
-#endif
+#endif /* !DROPOUT_H */

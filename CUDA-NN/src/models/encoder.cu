@@ -65,3 +65,4 @@ Tensor* Encoder::forward(Tensor* data) {
 Tensor* Encoder::backward(Tensor* gradients) {
     return nullptr;
 }
+

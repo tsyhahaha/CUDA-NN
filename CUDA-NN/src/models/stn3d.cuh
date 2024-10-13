@@ -31,4 +31,4 @@ class STN3d: public Module {
         Tensor* backward(Tensor* gradients);
 };
 
-#endif
+#endif /* !STN3D_H */

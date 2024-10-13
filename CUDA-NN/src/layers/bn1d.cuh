@@ -45,4 +45,4 @@ class BatchNorm1d: public BaseLayer {
 
 
 
-#endif
+#endif /* !BN1D_H */

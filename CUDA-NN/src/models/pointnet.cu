@@ -35,3 +35,4 @@ Tensor* PointNet::forward(Tensor* data) {
 Tensor* PointNet::backward(Tensor* gradients) {
     return nullptr;
 }
+

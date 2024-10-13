@@ -29,4 +29,4 @@ class PointNet: public Module {
         Tensor* backward(Tensor* gradients);
 };
 
-#endif
+#endif /* !POINTNET_H */

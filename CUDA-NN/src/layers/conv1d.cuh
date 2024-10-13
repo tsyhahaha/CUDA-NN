@@ -35,4 +35,4 @@ class Conv1d: public BaseLayer {
 
  
 
-#endif
+#endif /* !CONV1D_H */

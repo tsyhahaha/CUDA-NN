@@ -1,4 +1,4 @@
 #ifndef LOGGING_H
 #define LOGGING_H
 
-#endif
+#endif /* !LOGGING_H */

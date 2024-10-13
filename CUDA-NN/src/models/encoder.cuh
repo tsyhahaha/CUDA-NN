@@ -33,4 +33,4 @@ class Encoder: public Module {
         Tensor* backward(Tensor* gradients);
 };
 
-#endif
+#endif /* !ENCODER_H */
