@@ -27,11 +27,9 @@ void kReLU2D(float* A, float* d_out, int M, int N) {
 }
 
 
-ReLU::ReLU(std::string prefix, bool inplace) {
+ReLU::ReLU( bool inplace) {
     this->inplace = inplace;
     this->input = nullptr;
-
-    this->prefix = prefix;
 
     // Prepare output for forward and backprop
     this->output = nullptr;

@@ -20,6 +20,7 @@ class Dropout: public BaseLayer {
 
     public:
         Dropout(std::string prefix="", float p = 0.5f, bool inplace = false);
+        Dropout(float p = 0.5f, bool inplace = false);
 
         Tensor* forward(Tensor* data);
         Tensor* backward(Tensor* gradients);

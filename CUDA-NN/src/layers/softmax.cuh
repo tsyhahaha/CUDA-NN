@@ -10,6 +10,7 @@ class SoftMax: public BaseLayer {
 
     public:
         SoftMax(std::string prefix, size_t dim);
+        SoftMax(size_t dim);
         ~SoftMax();
 
         Tensor* forward(Tensor* data);

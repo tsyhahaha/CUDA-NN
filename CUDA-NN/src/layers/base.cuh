@@ -22,9 +22,11 @@ class BaseLayer {
         // Tensor* getDeltaBias();
 
         // utils
-        void load_weights(float *h_data, DimVector shape, const std::string& target);
+        void load_weights(float *h_data, size_t n_data, const std::string& target);
         
-        void load_weights(float *h_weight_data, float *h_bias_data, DimVector weight_shape, DimVector bias_shape);
+        void load_weights(float *h_weight_data, float *h_bias_data, size_t n_data_weights, size_t n_data_bias);
+
+        void load_weights(std::vector<float>& params, const std::string& target);
 
         void load_weights();
 

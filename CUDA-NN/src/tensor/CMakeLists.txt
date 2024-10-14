@@ -1,4 +1,3 @@
-
 aux_source_directory(./ TENSOR_SRC)
 aux_source_directory(kernels KERNELS_SRC)
 

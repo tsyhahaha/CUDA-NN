@@ -15,6 +15,7 @@ class ReLU: public BaseLayer {
         
     public:
         ReLU(std::string prefix, bool inplace = false);
+        ReLU(bool inplace = false);
         ~ReLU();
 
         Tensor* forward(Tensor* data);

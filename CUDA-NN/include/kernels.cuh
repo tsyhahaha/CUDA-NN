@@ -14,6 +14,9 @@
 /* Layer specific kernels*/
 
 __global__
+void kLinear2D(float* input, float* d_out, float* weights, float* bias, int M, int N, int K);
+
+__global__
 void kDropout1D(float* A, float* d_out, int N);
 
 __global__

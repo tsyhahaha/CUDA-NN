@@ -5,6 +5,10 @@ SoftMax::SoftMax(std::string prefix, size_t dim) {
     this->prefix = prefix;
 }
 
+SoftMax::SoftMax(size_t dim) {
+    this->dim = dim;
+}
+
 Tensor* SoftMax::forward(Tensor* data) {
     // this->input = data;
     // Tensor* x_max = data->max(this->dim);

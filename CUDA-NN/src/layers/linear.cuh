@@ -15,8 +15,8 @@ torch.nn.Linear(in_features, out_features, bias=True, device=None, dtype=None)
 */
 class Linear: public BaseLayer {
     private:
-        int in_features;
-        int out_features; 
+        size_t in_features;
+        size_t out_features; 
 
         // Tensor* weights; // (out_features, in_features)
         // Tensor* bias;   // (out_features)
@@ -27,6 +27,7 @@ class Linear: public BaseLayer {
 
     public:
         Linear(std::string prefix, size_t in_features, size_t out_features, bool bias=true, InitType init_type=KAIMING);
+        Linear(size_t in_features, size_t out_features, bool bias=true, InitType init_type=KAIMING);
         ~Linear();
 
         Tensor* forward(Tensor* data);

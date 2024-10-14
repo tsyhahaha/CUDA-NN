@@ -26,6 +26,7 @@ class Tensor {
         Tensor(float *h_data, DimVector shape);
         ~Tensor();
         void fromVec(std::vector<float>& vec);
+        std::vector<float> toVec();
 
         // getters
         size_t getDim();
@@ -36,6 +37,7 @@ class Tensor {
         DimVector getShape();
 
         // set value
+        void load(float* h_data, size_t n_data);
         void initialize(float value);
         void initialize(InitType type);
         void initialize(float *h_data, DimVector& shape);

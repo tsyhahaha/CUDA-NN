@@ -1,18 +1,123 @@
-#include <iostream>
-#include <vector>
-#include <iomanip>
-#include <string>
-#include <fstream>
-#include <map>
-#include <dirent.h>
-#include <cstring>
+// 这是程序二的模板程序，我们已经准备好了加载数据集和加载程序一模型参数的部分，请实现CUDA的深度学习推理过程，请严格保持输出格式输出
+// 编译的命令为：nvcc test.cu -o test -Xcompiler "-O3 -std=c++14" -gencode arch=compute_50,code=sm_50 -gencode arch=compute_52,code=sm_52 -gencode arch=compute_53,code=sm_53 -gencode arch=compute_60,code=sm_60 -gencode arch=compute_61,code=sm_61 -gencode arch=compute_62,code=sm_62 -gencode arch=compute_70,code=sm_70 -lhdf5 -lhdf5_cpp
 
+#include <vector>
+#include <chrono>
+#include <iomanip>
+#include <cstring>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <map>
+#include <string>
+#include <dirent.h>
+
+#include <sys/stat.h>
+#include <sys/types.h>
+
+#include "configure.cuh"
 #include "layers.cuh"
 #include "models.cuh"
 #include "tensor.cuh"
 #include "utils.cuh"
-#include "configure.cuh"
 
+#define toSizet(value) std::stoull(value)
+
+// 定义配置结构
+using ConfigMap = std::map<std::string, std::string>;  // 全局配置项
+using LayerParams = std::map<std::string, std::map<std::string, std::string>>;  // 层的参数
+
+// 解析 YAML 文件
+std::pair<ConfigMap, LayerParams> loadYamlConfig(const std::string& filename) {
+    std::ifstream file(filename);
+    ConfigMap config;
+    LayerParams layers;
+
+    std::string line;
+    std::string current_layer;
+    bool inside_layer = false;
+
+    while (std::getline(file, line)) {
+        // 移除首尾空格
+        line.erase(0, line.find_first_not_of(" \t"));
+        line.erase(line.find_last_not_of(" \t") + 1);
+
+        // 跳过空行或注释
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+
+        // 查找键值对的冒号
+        std::size_t colon_pos = line.find(':');
+        if (colon_pos != std::string::npos) {
+            std::string key = line.substr(0, colon_pos);
+            std::string value = line.substr(colon_pos + 1);
+
+            // 移除键和值的多余空格
+            key.erase(0, key.find_first_not_of(" \t"));
+            key.erase(key.find_last_not_of(" \t") + 1);
+            value.erase(0, value.find_first_not_of(" \t\""));
+            value.erase(value.find_last_not_of(" \t\"") + 1);
+
+            if(value == "") {
+                inside_layer = false;
+            }
+
+            if (!inside_layer) {
+                // 如果当前是全局配置项
+                if (value != "") {
+                    config[key] = value;
+                } else {
+                    // 开始新 layer 的定义
+                    current_layer = key;
+                    inside_layer = true;
+                }
+            } else {
+                // 如果在 layer 内部，解析 layer 的参数
+                layers[current_layer][key] = value;
+            }
+        } else {
+            // 当遇到新 section 时，结束当前 layer
+            inside_layer = false;
+        }
+    }
+
+    return {config, layers};
+}
+
+// 打印解析后的配置
+void printConfig(const ConfigMap& config, const std::map<std::string, std::string>& layer_params) {
+    std::cout << "General Config:\n\n";
+    for (ConfigMap::const_iterator it = config.begin(); it != config.end(); ++it) {
+        std::cout << it->first << ": " << it->second << '\n';
+    }
+
+    std::cout << "\nLayer Params:\n\n";
+    for (std::map<std::string, std::string>::const_iterator it = layer_params.begin(); it != layer_params.end(); ++it) {
+        std::cout << it->first << ": " << it->second << '\n';
+    }
+}
+
+bool create_directory(const std::string& path) {
+    // 使用 mkdir 创建目录，0777 是目录的权限
+    if (mkdir(path.c_str(), 0777) == 0) {
+        std::cout << "Directory created: " << path << std::endl;
+        return true;
+    } else {
+        if (errno == EEXIST) {
+            std::cerr << "Directory already exists: " << path << std::endl;
+            return true;  // 目录已经存在也认为是成功
+        } else {
+            std::cerr << "Error creating directory: " << strerror(errno) << std::endl;
+            return false;
+        }
+    }
+}
+
+
+/****************************************************************************************
+ * 读取模型参数
+ ****************************************************************************************/
 // 获取目录中的所有 .txt 文件
 std::vector<std::string> get_files_in_directory(const std::string& dir) {
     std::vector<std::string> files;
@@ -48,58 +153,142 @@ std::vector<float> read_param(const std::string& filepath) {
     return data;
 }
 
+std::vector<size_t> read_shape(const std::string& filepath) {
+    std::vector<size_t> data;
+    std::ifstream file(filepath);
+    if (file.is_open()) {
+        float value;
+        while (file >> value) {
+            data.push_back(value);
+        }
+        file.close();
+    } else {
+        std::cerr << "Unable to open file: " << filepath << std::endl;
+    }
+    return data;
+}
+
+void save_vector_to_txt(const std::string& filename, const std::vector<float>& data) {
+    std::ofstream file(filename);
+    
+    if (file) {
+        for (const float& value : data) {
+            file << value << "\n";
+        }
+        file.close();
+        DEBUG_PRINT("Output saved to %s\n", filename.c_str());
+    } else {
+        std::cerr << "Unable to open file: " << filename << std::endl;
+    }
+}
+
 std::map<std::string, std::vector<float>> read_params(std::string dir) {
-    // std::string dir = "."; // 当前目录
     std::map<std::string, std::vector<float>> params;
 
-    // 获取目录中的所有 .txt 文件
     std::vector<std::string> param_files = get_files_in_directory(dir);
     for (const auto& file : param_files) {
         std::string filename = file.substr(0, file.find_last_of(".")); // 获取不带扩展名的文件名
         params[filename] = read_param(dir + "/" + file);
     }
 
-    // // 访问参数时可以使用 params["conv1_weight"]
-    // for (const auto& kv : params) {
-    //     std::cout << "Key: " << kv.first << ", Values: ";
-    //     // for (const auto& value : kv.second) {
-    //     //     std::cout << value << " ";
-    //     // }
-    //     std::cout << std::endl;
-    // }
-
     return params;
 }
 
-void test_params_load() {
-    std::string dir = "/home/course/taosiyuan241/best_model";
-    
-    // 读取模型参数
-    auto params = read_params(dir);
-    Configurer::set_global_weights(params);
-
-    PointNet* nn = new PointNet();
-
-    nn->load_weights();
-
-    printf("load model done\n");
-
-    const char* path = "/home/course/taosiyuan241/CUDA-NN/data/bn1.weight.txt";
-    float* h_o;
-
-    DimVector shape = {2, 3, 4};
-    float* h_d1 = loadWeightsFromTxt(path, shape);
-
-    Tensor* input = new Tensor(h_d1, shape);
-
-    Tensor* o = nn->forward(input);
-
-    h_o = o->toHost();
-
-    printM(h_o, o->getShape());
-
+std::string getBaseName(const std::string& filename) {
+    size_t last_dot = filename.find_last_of('.');
+    if (last_dot != std::string::npos) {
+        return filename.substr(0, last_dot);
+    }
+    return filename; 
 }
 
-int main() {
-    test_params_load();
+/* support to test single layer with its pretrained weights */
+int main(int argc, char *argv[]) {
+
+    std::string filename = "/home/course/taosiyuan241/CUDA-NN/config.yaml";
+    // std::string filenale = argv[1];
+    
+    // Parse the yaml configuration
+    std::pair<ConfigMap, LayerParams> config = loadYamlConfig(filename);
+    std::string layer_name = config.first["layer"];
+    if (config.second.find(layer_name) != config.second.end()) {
+        printConfig(config.first, config.second[layer_name]);
+    } else {
+        std::cerr << "Error: Layer " << layer_name << " not found.\n";
+    }
+
+    std::string layer = config.first["layer"];
+    std::string param_file = config.first["param_path"];   // weights filename without postfix like .weights.txt, .bias.txt
+    std::string data_dir = config.first["data_dir"];     // this test points dir
+
+    printf("Finished loading yaml config.\n");
+
+    // prepare to load the model to be tested
+    const std::string weights_file = param_file + ".weight.txt";
+    const std::string bias_file = param_file + ".bias.txt";
+    auto weight_params = read_param(weights_file);
+    auto bias_params = read_param(bias_file);
+
+    BaseLayer* nn;
+
+    std::map<std::string, std::string> cfg = config.second[layer_name];
+    if(layer == "linear") {
+         nn = new Linear(toSizet(cfg["in_features"]), toSizet(cfg["out_features"]));
+        nn->load_weights(weight_params, "weights");
+        nn->load_weights(bias_params, "bias");
+    } else if(layer=="batchnorm1d") {
+        nn = new BatchNorm1d(toSizet(cfg["num_features"]));
+        nn->load_weights(weight_params, "weights");
+        nn->load_weights(bias_params, "bias");
+        auto running_mean = read_param(param_file + ".running_mean.txt");
+        auto running_var = read_param(param_file + ".running_var.txt");
+        nn->load_weights(running_mean, "mean");
+        nn->load_weights(running_var, "var");
+    } else if(layer=="conv1d") {
+        printf("123\n");
+        nn = new Conv1d(toSizet(cfg["in_channels"]), toSizet(cfg["out_channels"]), 1);
+        printf("HERE\n");
+        nn->load_weights(weight_params, "weights");
+        nn->load_weights(bias_params, "bias");
+    } else {
+        ERROR("Not implemented!\n");
+    }
+
+    printf("Load weights to layer %s\n", layer.c_str());
+
+    // load beat test points
+    std::string test_dir = data_dir + "/beat";
+    std::string output_dir = data_dir + "/cuout";
+    create_directory(output_dir);
+    std::vector<std::string> test_points;
+    test_points = get_files_in_directory(test_dir);
+
+    auto start = std::chrono::high_resolution_clock::now();
+    for(std::string test_file: test_points) {
+        if(test_file.find("shape") == std::string::npos) {
+            std::string base_name = getBaseName(test_file);
+
+            test_file = test_dir + "/" + base_name;
+            DEBUG_PRINT("%s\n", test_file.c_str());
+
+            std::vector<float> data_vec = read_param(test_file + ".txt");
+            std::vector<size_t> shape = read_shape(test_file + ".shape.txt");
+
+            Tensor* input = new Tensor(data_vec.data(), shape);
+            Tensor* output = nn->forward(input);
+
+            std::vector<float> output_vec = output->toVec();
+            std::string output_file = output_dir + "/" + base_name + ".txt";
+            save_vector_to_txt(output_file, output_vec);
+        }
+    }
+    
+    cudaDeviceSynchronize();
+
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> diff = end - start;
+
+    std::cout << std::fixed << std::setprecision(4) << diff.count() << "s\n";
+
+    return 0;
 }

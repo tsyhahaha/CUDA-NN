@@ -25,6 +25,16 @@ Dropout::Dropout(std::string prefix, float p, bool inplace) {
     this->prefix = prefix;
 }
 
+Dropout::Dropout(float p, bool inplace) {
+    this->p = p;
+    this->inplace = inplace;
+    this->input = nullptr;
+
+    // Prepare output for forward and backprop
+    this->output = nullptr;
+    this->outputBackward = nullptr;
+}
+
 
 Tensor* Dropout::forward(Tensor* data) {
     this->input = data;

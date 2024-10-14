@@ -66,6 +66,24 @@ Conv1d::Conv1d(std::string prefix, size_t in_channels, size_t out_channels, size
     this->weights = new Tensor({out_channels, in_channels}, RANDOM);
 }
 
+Conv1d::Conv1d(size_t in_channels, size_t out_channels, size_t kernel_size, bool bias) {
+    DEBUG_PRINT("in the constructor\n");
+    this->in_channels = in_channels;
+    this->out_channels = out_channels;
+    this->kernel_size = this->kernel_size;
+
+    if(kernel_size != 1) {
+        perror("Not implemented!");
+    }
+
+    if(bias) {
+        this->bias = new Tensor({out_channels}, ZERO);
+    } else 
+        this->bias = nullptr;
+
+    this->weights = new Tensor({out_channels, in_channels}, RANDOM);
+}
+
 Conv1d::~Conv1d() {
     delete weights, bias, input, output, outputBackward;
 }

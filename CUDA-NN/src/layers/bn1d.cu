@@ -42,24 +42,23 @@ void BatchNorm1d::load_weights() {
     this->running_var->fromVec(Configurer::getWeights(this->prefix + "running_var"));
 }
 
-void BatchNorm1d::load_weights(float *h_weights_data, float *h_bias_data, DimVector weights_shape, DimVector bias_shape) {
-    this->weights->initialize(h_weights_data, weights_shape);        
-    this->bias->initialize(h_bias_data, bias_shape);
-}
-
-void BatchNorm1d::load_weights(float *h_data, DimVector shape, const std::string& target) {
-    if(target == "weights") {
-        assert(this->weights->getShape() == shape);
-        this->weights->initialize(h_data, shape);        
+void BatchNorm1d::load_weights(std::vector<float>& params, const std::string& target) {
+    size_t n_data = params.size();
+    float* h_data = params.data();
+    if(target=="weights") {
+        assert(n_data == this->weights->getDataNum());
+        this->weights->load(h_data, n_data);
     } else if(target == "bias") {
-        assert(this->bias->getShape() == shape);
-        this->bias->initialize(h_data, shape);
+        assert(n_data == this->bias->getDataNum());
+        this->bias->load(h_data, n_data);
     } else if(target == "mean") {
-        assert(this->running_mean->getShape() == shape);
-        this->running_mean->initialize(h_data, shape);
-    }else if(target == "var") {
-        assert(this->running_var->getShape() == shape);
-        this->running_var->initialize(h_data, shape);
+        assert(this->running_mean->getDataNum() == n_data);
+        this->running_mean->load(h_data, n_data);
+    } else if(target == "var") {
+        assert(this->running_var->getDataNum() == n_data);
+        this->running_var->load(h_data, n_data);
+    } else {
+        ERROR("Load weights %s error!\n", target.c_str());
     }
 }
 
@@ -71,6 +70,32 @@ BatchNorm1d::BatchNorm1d(std::string prefix, size_t num_features, float eps, flo
     this->track_running_stats = track_running_stats;
 
     this->prefix = prefix;
+
+    if(affine) {
+        this->weights = new Tensor({num_features}, ONES);
+        this->bias = new Tensor({num_features}, ZERO);
+    } else {
+        // the output is just centralization
+        this->weights = nullptr;
+        this->bias = nullptr;
+    }
+
+    if(this->track_running_stats) {
+        this->running_mean = new Tensor({num_features}, ZERO);
+        this->running_var = new Tensor({num_features}, ONES);
+    } else {
+        // use batch statistics(bias estimate)
+        this->running_mean = nullptr;
+        this->running_var = nullptr;
+    }
+}
+
+BatchNorm1d::BatchNorm1d(size_t num_features, float eps, float monmentum, bool affine, bool track_running_stats) {
+    this->num_features = num_features;
+    this->eps = eps;
+    this->momentum = monmentum;
+    this->affine = affine;
+    this->track_running_stats = track_running_stats;
 
     if(affine) {
         this->weights = new Tensor({num_features}, ONES);

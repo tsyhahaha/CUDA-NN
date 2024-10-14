@@ -30,11 +30,10 @@ class BatchNorm1d: public BaseLayer {
 
     public:
         BatchNorm1d(std::string prefix, size_t num_features, float eps = 1e-5, float monmentum=0.1, bool affine=true, bool track_running_stats=true);
+        BatchNorm1d(size_t num_features, float eps = 1e-5, float monmentum=0.1, bool affine=true, bool track_running_stats=true);
         ~BatchNorm1d();
 
-        void load_weights(float *h_weights_data, float *h_bias_data, DimVector weights_shape, DimVector bias_shape);
-
-        void load_weights(float *h_data, DimVector shape, const std::string& target);
+        void load_weights(std::vector<float>& params, const std::string& target);
 
         void load_weights();
 

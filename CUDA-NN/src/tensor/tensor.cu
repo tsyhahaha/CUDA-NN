@@ -42,9 +42,15 @@ void Tensor::fromVec(std::vector<float>& vec) {
     if(vec.size() != this->n_data) {
         ERROR("%ld != %ld, weight size not matched!\n", vec.size(), this->n_data);
     }
-    DEBUG_PRINT("n_data = %ld, vec.size() = %ld\n", n_data, vec.size());
     float* h_data = vec.data();
     CHECK(cudaMemcpy(this->d_data, h_data, this->n_data * sizeof(float), cudaMemcpyHostToDevice));
+}
+
+std::vector<float> Tensor::toVec() {
+    float* h_data = this->toHost();
+    size_t size = this->getDataNum();
+    std::vector<float> vec(h_data, h_data + size);
+    return vec;
 }
 
 /* getters */
@@ -77,6 +83,11 @@ float* Tensor::getData() {
 }
 
 /* setters */
+
+void Tensor::load(float* h_data, size_t n_data) {
+    assert(n_data = this->n_data);
+    CHECK(cudaMemcpy(d_data, h_data, n_data * sizeof(float), cudaMemcpyHostToDevice));
+}
 
 void Tensor::initialize(float value) {
     size_t nBytes = this->n_data * sizeof(float);
@@ -737,6 +748,8 @@ DimVector getMatmulShape(DimVector& shape1, DimVector& shape2) {
             }
         }
     } else {
+        printShape(shape1);
+        printShape(shape2);
         ERROR("Not implemented!");
     }
     return {};
