@@ -5,3 +5,5 @@ if (NOT SRC_LIST)
 endif()
 
 add_library(kernels ${SRC_LIST})
+
+target_link_libraries(kernels PRIVATE common)

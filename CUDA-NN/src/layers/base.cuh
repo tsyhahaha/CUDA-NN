@@ -3,10 +3,10 @@
 #define BASE_H
 
 #include "tensor.cuh"
+#include "module.cuh"
 
-class BaseLayer {
+class BaseLayer: public Module {
     protected:
-        std::string prefix;
         Tensor* weights = nullptr;
         Tensor* bias = nullptr;
 

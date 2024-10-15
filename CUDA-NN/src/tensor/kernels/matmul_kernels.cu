@@ -183,6 +183,7 @@ void kBatchMatmul3D(
     float*d_A, float* d_B, float*d_out, int B, int M, int N, int K
 ) {
     // A (B x M x N) @ B (B x N x K) = C (B x M x K)
+    float cVal = 0.0f;
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -190,23 +191,26 @@ void kBatchMatmul3D(
     __shared__ float ds_B[TILE_SIZE][BLOCK_SIZE2D];
 
     for(int b=0; b<B; b++) {
-        float cVal = 0.0f;
+        cVal = 0.0f;
         int offset1 = b * M * N;
         int offset2 = b * N * K;
         int offset3 = b * M * K;
         int phase = (N - 1) / TILE_SIZE + 1;
-        for(int p=0; p<phase;p++) {
-            if (row < M && p*TILE_SIZE + threadIdx.x < N && threadIdx.x < TILE_SIZE) {
-                ds_A[threadIdx.y][threadIdx.x] = d_A[offset1 + row*N + p*TILE_SIZE + threadIdx.x];
-            } else if(threadIdx.y < BLOCK_SIZE2D && threadIdx.x < TILE_SIZE) {
-                // PS: It's faster  if TILE_SIZE is a factor of the matrix dimension
-                ds_A[threadIdx.y][threadIdx.x] = 0.0f;
+        for(int p=0; p<phase; p++) {
+            if (row < M  && threadIdx.x < TILE_SIZE) {
+                if(p*TILE_SIZE + threadIdx.x < N) {
+                    ds_A[threadIdx.y][threadIdx.x] = d_A[offset1 + row*N + p*TILE_SIZE + threadIdx.x];
+                } else {
+                    ds_A[threadIdx.y][threadIdx.x] = 0.0f;
+                }
             }
 
-            if(p*TILE_SIZE + threadIdx.y < N && col < K && threadIdx.y < TILE_SIZE) {
-                ds_B[threadIdx.y][threadIdx.x] = d_B[offset2 + (p*TILE_SIZE + threadIdx.y)*K + col];
-            } else if (threadIdx.y < TILE_SIZE && threadIdx.x < BLOCK_SIZE2D) {
-                ds_B[threadIdx.y][threadIdx.x] = 0.0f;
+            if(col < K && threadIdx.y < TILE_SIZE) {
+                if(p*TILE_SIZE + threadIdx.y < N) {
+                    ds_B[threadIdx.y][threadIdx.x] = d_B[offset2 + (p*TILE_SIZE + threadIdx.y)*K + col];
+                } else {
+                    ds_B[threadIdx.y][threadIdx.x] = 0.0f;
+                }
             }
 
             __syncthreads();
@@ -218,7 +222,6 @@ void kBatchMatmul3D(
         }
 
         if (row < M && col < K) {
-            // printf("d_out[%d][%d][%d] = %f\n", b, row, col, cVal);
             d_out[offset3 + row*K + col] = cVal;
         }
     }

@@ -9,7 +9,7 @@ add_subdirectory(models)
 set(EXECUTABLE_OUTPUT_PATH ${EXEC_PATH})
 add_executable(main main.cu)
 
-target_link_libraries(main layers common tensor models)
+target_link_libraries(main common tensor layers models)
 
 
 add_custom_target(run

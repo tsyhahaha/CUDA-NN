@@ -1,16 +1,20 @@
-layer: linear
-param_path: ./data/feat.stn.fc3
-data_dir: ./data
+# if change targe/name, please check the mode!
+target: model
+name: pointnet
+
+param_path: /home/taosiyuan/cudaCode/best_model/
+data_dir: /home/taosiyuan/cudaCode/CUDA-NN/data
 data_num: 10
-regenerate: false
+
+mode: test # test, regenerate, beat
 
 linear:
   in_features: 256
-  out_features: 9
+  out_features: 4096
 
 batchnorm1d:
-  in_channels: 512
+  in_channels: 256
 
 conv1d:
-  in_channels: 3
+  in_channels: 64
   out_channels: 64

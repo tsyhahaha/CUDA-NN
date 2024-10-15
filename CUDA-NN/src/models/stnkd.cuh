@@ -3,12 +3,13 @@
 
 #include "tensor.cuh"
 #include "layers.cuh"
-#include "module.cuh"
+// #include "module.cuh"
 
 class STNkd: public Module {
     private:
         size_t k;
-
+        
+    public:
         Conv1d* conv1;
         Conv1d* conv2;
         Conv1d* conv3;
@@ -23,7 +24,7 @@ class STNkd: public Module {
         BatchNorm1d* bn5;
 
     public:
-        STNkd(std::string prefix, size_t k);
+        STNkd(std::string prefix, size_t k=64);
         ~STNkd();
 
         void load_weights();

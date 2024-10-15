@@ -43,6 +43,49 @@ void kLinear2D(float* input, float* d_out, float* weights, float* bias, int M, i
         d_out[row*K + col] = cVal + ds_bias[threadIdx.x];
 }
 
+__global__
+void kLinear3D(float* input, float* d_out, float* weights, float* bias, int M, int N, int K) {
+    float cVal = 0.0f;
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    __shared__ float ds_A[BLOCK_SIZE2D][TILE_SIZE];
+    __shared__ float ds_B[BLOCK_SIZE2D][TILE_SIZE];
+    __shared__ float ds_bias[BLOCK_SIZE2D];
+
+    int phase = (N - 1) / TILE_SIZE + 1;
+    for(int p=0; p<phase;p++) { 
+        if (row < M && threadIdx.x < TILE_SIZE) {
+            if(p*TILE_SIZE + threadIdx.x < N) {
+            ds_A[threadIdx.y][threadIdx.x] = input[row*N + p*TILE_SIZE + threadIdx.x];
+            } else {
+            ds_A[threadIdx.y][threadIdx.x] = 0.0f;
+            }
+       	}
+        
+        if (col < K && threadIdx.y < TILE_SIZE) {
+            if(p*TILE_SIZE+threadIdx.y < N) {
+            ds_B[threadIdx.x][threadIdx.y] = weights[col*N + p*TILE_SIZE + threadIdx.y];
+            } else {
+                ds_B[threadIdx.x][threadIdx.y] = 0.0f;
+            }
+
+        }
+        if(threadIdx.y == 0)
+            ds_bias[threadIdx.x] = bias[col];
+
+        __syncthreads();
+        for (int i=0; i<TILE_SIZE; i++) {
+            // constant: ds_A's x , ds_B's x
+            cVal += ds_A[threadIdx.y][i] * ds_B[threadIdx.x][i];
+        }
+        __syncthreads();
+    }
+
+    if(row < M && col < K)
+        d_out[row*K + col] = cVal + ds_bias[threadIdx.x];
+}
+
 Linear::Linear(std::string prefix, size_t in_features, size_t out_features, bool bias, InitType init_type) {
     this->in_features = in_features;
     this->out_features = out_features;
@@ -85,6 +128,10 @@ Tensor* Linear::forward(Tensor* data) {
     // data(B x N) @ weightss(M x N).T + bias(M) = output(B x M)
     this->input = data;
     if(data->getDim() != 2) {
+        printShape(data->getShape());
+        if(this->prefix != "") {
+            DEBUG_PRINT("%s\n", this->prefix.c_str());
+        }
         ERROR("Not implemented!\n");
     }
 

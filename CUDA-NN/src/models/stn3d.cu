@@ -41,10 +41,10 @@ void STN3d::load_weights() {
 
 Tensor* STN3d::forward(Tensor* data) {
     size_t bz = data->getShape()[0];
-    Tensor* x = bn1->forward(conv1->forward(data));
-    x = bn2->forward(conv2->forward(x));
-    x = bn3->forward(conv3->forward(x));
-    x->max_(-1, false);
+    Tensor* x = relu->forward(bn1->forward(conv1->forward(data)));
+    x = relu->forward(bn2->forward(conv2->forward(x)));
+    x = relu->forward(bn3->forward(conv3->forward(x)));
+    x->max_(2, false);
 
     x = relu->forward(bn4->forward(fc1->forward(x)));
     x = relu->forward(bn5->forward(fc2->forward(x)));
@@ -56,7 +56,6 @@ Tensor* STN3d::forward(Tensor* data) {
     Tensor* o = x->add(iden);
     o->reshape({bz, 3, 3});
 
-    delete x;
     return o;
 
 }

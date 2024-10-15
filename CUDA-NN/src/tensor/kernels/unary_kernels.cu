@@ -102,23 +102,30 @@ void kSumLastDim2D(float* d_data, float* d_out, size_t C, size_t L
 }
 
 __global__
-void kTransposeLast3D(float* d_data, float* d_out, size_t N, size_t m, size_t n
+void kTransposeLast3D(float* d_data, float* d_out, size_t N, size_t row, size_t col
 ){
     __shared__ float sd_M[BLOCK_SIZE2D][BLOCK_SIZE2D];
 
     for(int b=0; b<N; b++) {
         int x = blockIdx.x * blockDim.x + threadIdx.x;
         int y = blockIdx.y * blockDim.y + threadIdx.y;
+        int stride = b*row*col;
 
-        if (x >= n || y >= m) {
-            return;
+        // if(y < row && x < col)
+        //     d_out[stride + x*row + y] = d_data[stride + y*col + x];
+
+        if(y < row && x < col) {
+            sd_M[threadIdx.y][threadIdx.x] = d_data[stride + y*col + x];
+        } else {
+            sd_M[threadIdx.y][threadIdx.x] = 0.0f;
         }
-        // printf("d_data[%d][%d][%d] = %f\n", b, y, x, d_data[b*m*n + y * n + x]);
-        sd_M[threadIdx.y][threadIdx.x] = d_data[b*m*n + y * n + x];
-
         __syncthreads();
 
-        d_out[b*m*n + x * m + y] = sd_M[threadIdx.y][threadIdx.x];
+        if(y < row && x < col) {
+            d_out[stride + x*row + y] = sd_M[threadIdx.y][threadIdx.x];
+        }
+        __syncthreads();
+
     }
 }
 
@@ -224,7 +231,14 @@ void kExp(float* d_data, float* d_out, int n_data) {
     d_out[id] = expf(d_data[id]);
 }
 
+__global__
+void kLog(float* d_data, float* d_out, int n_data) {
+    int id = threadIdx.x + blockDim.x * blockIdx.x;
 
+    if (id >= n_data) return;
+
+    d_out[id] = logf(d_data[id]);
+}
 
 
 

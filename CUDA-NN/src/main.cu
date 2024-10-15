@@ -105,17 +105,14 @@ bool create_directory(const std::string& path) {
         return true;
     } else {
         if (errno == EEXIST) {
-            std::cerr << "Directory already exists: " << path << std::endl;
+            DEBUG_PRINT("Directory already exists: %s\n", path.c_str());
             return true;  // 目录已经存在也认为是成功
         } else {
-            std::cerr << "Error creating directory: " << strerror(errno) << std::endl;
+            ERROR("Error creating directory: %s", strerror(errno));
             return false;
         }
     }
 }
-
-
-
 
 /****************************************************************************************
  * 读取模型参数
@@ -134,7 +131,7 @@ std::vector<std::string> get_files_in_directory(const std::string& dir) {
         }
         closedir(dp);
     } else {
-        perror("opendir");
+        ERROR("Failed to read files in dir %s\n", dir.c_str());
     }
     return files;
 }
@@ -150,7 +147,7 @@ std::vector<float> read_param(const std::string& filepath) {
         }
         file.close();
     } else {
-        std::cerr << "Unable to open file: " << filepath << std::endl;
+        ERROR("Unable to open file: %s\n", filepath.c_str());
     }
     return data;
 }
@@ -165,7 +162,7 @@ std::vector<size_t> read_shape(const std::string& filepath) {
         }
         file.close();
     } else {
-        std::cerr << "Unable to open file: " << filepath << std::endl;
+        ERROR("Unable to open file: %s\n", filepath.c_str());
     }
     return data;
 }
@@ -178,13 +175,12 @@ void save_vector_to_txt(const std::string& filename, const std::vector<float>& d
             file << value << "\n";
         }
         file.close();
-        DEBUG_PRINT("Output saved to %s\n", filename.c_str());
     } else {
-        std::cerr << "Unable to open file: " << filename << std::endl;
+        ERROR("Unable to open file: %s\n", filename.c_str());
     }
 }
 
-std::map<std::string, std::vector<float>> read_params(std::string dir) {
+std::map<std::string, std::vector<float>> read_params(std::string& dir) {
     std::map<std::string, std::vector<float>> params;
 
     std::vector<std::string> param_files = get_files_in_directory(dir);
@@ -204,57 +200,59 @@ std::string getBaseName(const std::string& filename) {
     return filename; 
 }
 
-/* support to test single layer with its pretrained weights */
-int main(int argc, char *argv[]) {
+auto getModel(const std::string& target, const std::string& name, std::map<std::string, std::string>& cfg, std::string& param_file) {
+    Module* nn;
+    if(target=="model") {
+        Configurer::set_global_weights(read_params(param_file));
+        nn = new PointNet();
+        static_cast<PointNet*>(nn)->load_weights();
+        if(name == "encoder") {
+            nn = static_cast<PointNet*>(nn)->feat;
+        } else if(name == "stn3d") {
+            nn = static_cast<PointNet*>(nn)->feat->stn;
+        } else if(name == "stnkd") {
+            nn = static_cast<PointNet*>(nn)->feat->fstn;
+        }
+        return nn;
+    } else if(target == "layer") {
+        // prepare to load the model to be tested
+        const std::string weights_file = param_file + ".weight.txt";
+        const std::string bias_file = param_file + ".bias.txt";
+        auto weight_params = read_param(weights_file);
+        auto bias_params = read_param(bias_file);
 
-    std::string filename = "/home/taosiyuan/cudaCode/CUDA-NN/config.yaml";
-    // std::string filenale = argv[1];
-    
-    // Parse the yaml configuration
-    std::pair<ConfigMap, LayerParams> config = loadYamlConfig(filename);
-    std::string layer_name = config.first["layer"];
-    if (config.second.find(layer_name) != config.second.end()) {
-        printConfig(config.first, config.second[layer_name]);
+        if(name == "linear") {
+            nn = new Linear(toSizet(cfg["in_features"]), toSizet(cfg["out_features"]));
+            static_cast<Linear*>(nn)->load_weights(weight_params, "weights");
+            static_cast<Linear*>(nn)->load_weights(bias_params, "bias");
+        } else if(name=="batchnorm1d") {
+            nn = new BatchNorm1d(toSizet(cfg["in_channels"]));
+            static_cast<BatchNorm1d*>(nn)->load_weights(weight_params, "weights");
+            static_cast<BatchNorm1d*>(nn)->load_weights(bias_params, "bias");
+            auto running_mean = read_param(param_file + ".running_mean.txt");
+            auto running_var = read_param(param_file + ".running_var.txt");
+            static_cast<BatchNorm1d*>(nn)->load_weights(running_mean, "mean");
+            static_cast<BatchNorm1d*>(nn)->load_weights(running_var, "var");
+        } else if(name=="conv1d") {
+            nn = new Conv1d(toSizet(cfg["in_channels"]), toSizet(cfg["out_channels"]), 1);
+            static_cast<Conv1d*>(nn)->load_weights(weight_params, "weights");
+            static_cast<Conv1d*>(nn)->load_weights(bias_params, "bias");
+        } else {
+            ERROR("Not implemented!\n");
+        }
+        return nn;
     } else {
-        std::cerr << "Error: Layer " << layer_name << " not found.\n";
+        ERROR("Target: %s not implemented!\n", target.c_str());
     }
+}
 
-    std::string layer = config.first["layer"];
-    std::string param_file = config.first["param_path"];   // weights filename without postfix like .weights.txt, .bias.txt
-    std::string data_dir = config.first["data_dir"];     // this test points dir
+void test_module(
+    std::string& target, std::string& name, 
+    std::string& param_file, std::string& data_dir, 
+    std::map<std::string, std::string> cfg){
 
-    printf("Finished loading yaml config.\n");
-
-    // prepare to load the model to be tested
-    const std::string weights_file = param_file + ".weight.txt";
-    const std::string bias_file = param_file + ".bias.txt";
-    auto weight_params = read_param(weights_file);
-    auto bias_params = read_param(bias_file);
-
-    BaseLayer* nn;
-
-    std::map<std::string, std::string> cfg = config.second[layer_name];
-    if(layer == "linear") {
-        nn = new Linear(toSizet(cfg["in_features"]), toSizet(cfg["out_features"]));
-        nn->load_weights(weight_params, "weights");
-        nn->load_weights(bias_params, "bias");
-    } else if(layer=="batchnorm1d") {
-        nn = new BatchNorm1d(toSizet(cfg["in_channels"]));
-        nn->load_weights(weight_params, "weights");
-        nn->load_weights(bias_params, "bias");
-        auto running_mean = read_param(param_file + ".running_mean.txt");
-        auto running_var = read_param(param_file + ".running_var.txt");
-        static_cast<BatchNorm1d*>(nn)->load_weights(running_mean, "mean");
-        static_cast<BatchNorm1d*>(nn)->load_weights(running_var, "var");
-    } else if(layer=="conv1d") {
-        nn = new Conv1d(toSizet(cfg["in_channels"]), toSizet(cfg["out_channels"]), 1);
-        nn->load_weights(weight_params, "weights");
-        nn->load_weights(bias_params, "bias");
-    } else {
-        ERROR("Not implemented!\n");
-    }
-
-    printf("Load weights to layer %s\n", layer.c_str());
+    auto nn = getModel(target, name, cfg, param_file);
+    DEBUG_PRINT("Load weights to %s\n", name.c_str());
 
     // load beat test points
     std::string test_dir = data_dir + "/beat";
@@ -289,6 +287,79 @@ int main(int argc, char *argv[]) {
     std::chrono::duration<double> diff = end - start;
 
     std::cout << std::fixed << std::setprecision(4) << diff.count() << "s\n";
+}
+
+void test_op(
+    std::string& target, std::string& name, 
+    std::string& param_file, std::string& data_dir, 
+    std::map<std::string, std::string> cfg){
+
+    // load beat test points
+    std::string test_dir = data_dir + "/beat";
+    std::string output_dir = data_dir + "/cuout";
+    create_directory(output_dir);
+    std::vector<std::string> test_points;
+    test_points = get_files_in_directory(test_dir);
+
+    auto start = std::chrono::high_resolution_clock::now();
+    for(std::string test_file: test_points) {
+        if(test_file.find("shape") == std::string::npos) {
+            std::string base_name = getBaseName(test_file);
+            test_file = test_dir + "/" + base_name;
+            DEBUG_PRINT("[TESTING] %s\n", test_file.c_str());
+            std::vector<float> data_vec = read_param(test_file + ".txt");
+            std::vector<size_t> shape = read_shape(test_file + ".shape.txt");
+            Tensor* input = new Tensor(data_vec.data(), shape);
+            std::vector<float> output_vec;
+            if(name == "max") {
+                input->max_(2, false);
+                output_vec = input->toVec();
+            } else {
+                ERROR("Not implemented op %s!\n", name.c_str());
+            }
+
+            std::string output_file = output_dir + "/" + base_name + ".txt";
+            save_vector_to_txt(output_file, output_vec);
+        }
+    }
+    
+    cudaDeviceSynchronize();
+
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> diff = end - start;
+
+    std::cout << std::fixed << std::setprecision(4) << diff.count() << "s\n";
+}
+
+/* support to test single layer with its pretrained weights */
+int main(int argc, char *argv[]) {
+
+    std::string filename = "/home/taosiyuan/cudaCode/CUDA-NN/config.yaml";
+    
+    // Parse the yaml configuration
+    std::pair<ConfigMap, LayerParams> config = loadYamlConfig(filename);
+    std::string target = config.first["target"];
+    std::string name = config.first["name"];
+    if (target == "layer" && config.second.find(name) != config.second.end()) {
+        printConfig(config.first, config.second[name]);
+    } else if(target=="layer") {
+        ERROR("Error: Layer %s not found\n", name.c_str());
+    }
+
+    std::string param_file = config.first["param_path"];   // weights filename without postfix like .weights.txt, .bias.txt
+    std::string data_dir = config.first["data_dir"];     // this test points dir
+
+    DEBUG_PRINT("Finished loading yaml config.\n");
+    std::map<std::string, std::string> cfg = config.second[name];
+    
+    if(target=="model" || target=="layer") {
+        test_module(target, name, param_file, data_dir, cfg);
+    } else if(target == "op") {
+        test_op(target, name, param_file, data_dir, cfg);
+    } else {
+        ERROR("Not implemented target %s\n", target.c_str());
+    }
+    
 
     return 0;
 }

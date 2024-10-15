@@ -3,11 +3,11 @@
 
 #include "tensor.cuh"
 #include "layers.cuh"
-#include "module.cuh"
+// #include "module.cuh"
 
 /* Maybe it can be acquired by STNkd...... */
 class STN3d: public Module {
-    private:
+    public:
         Conv1d* conv1;
         Conv1d* conv2;
         Conv1d* conv3;

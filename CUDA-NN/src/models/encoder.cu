@@ -22,7 +22,14 @@ Encoder::Encoder(std::string prefix, bool global_feat, bool feature_transform, s
 }
 
 Encoder::~Encoder() {
-    delete stn, conv1, conv2, conv3, bn1, bn2, bn3, relu;
+    delete stn;
+    delete conv1;
+    delete conv2;
+    delete conv3;
+    delete bn1;
+    delete bn2;
+    delete bn3;
+    delete relu;
 }
 
 void Encoder::load_weights() {
@@ -33,6 +40,9 @@ void Encoder::load_weights() {
     this->bn1->load_weights();
     this->bn2->load_weights();
     this->bn3->load_weights();
+    if(feature_transform) {
+        this->fstn->load_weights();
+    }
 }
 
 Tensor* Encoder::forward(Tensor* data) {
@@ -44,17 +54,19 @@ Tensor* Encoder::forward(Tensor* data) {
     data->transpose(2, 1);
     assert(D == 3);
 
-    Tensor* data_trans = data->bmm(trans);   // (N L C) @ (N C C)
-    Tensor* x = relu->forward(bn1->forward(conv1->forward(data_trans)));
+
+    Tensor* x = data->bmm(trans);   // (N L C) @ (N C C)
+    x->transpose(2, 1);
+    // x = bn1->forward(conv1->forward(x));
+    x = relu->forward(bn1->forward(conv1->forward(x)));
 
     if(this->feature_transform) {
         Tensor* trans_feat = fstn->forward(x);
-        x->transpose(-1, -2);
+        x->transpose(2, 1);
         Tensor* f_trans = x->bmm(trans_feat);    // track f_trans
         x = f_trans;
-        x->transpose(-1, -2);
+        x->transpose(2, 1);
     }
-
 
     x = relu->forward(bn2->forward(conv2->forward(x)));
     x = bn3->forward(conv3->forward(x));
@@ -68,6 +80,7 @@ Tensor* Encoder::forward(Tensor* data) {
     if(this->global_feat) {
         return x;
     }
+    ERROR("Not implemented!\n");
     return nullptr;    
 }
 

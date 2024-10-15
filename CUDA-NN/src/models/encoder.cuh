@@ -1,7 +1,7 @@
 #ifndef ENCODER_H
 #define ENCODER_H
 
-#include "module.cuh"
+// #include "module.cuh"
 #include "tensor.cuh"
 #include "layers.cuh"
 #include "stn3d.cuh"
@@ -12,7 +12,7 @@ class Encoder: public Module {
         bool global_feat;
         bool feature_transform;
         size_t channel;
-
+    public:
         STN3d* stn;
         STNkd* fstn;
         Conv1d* conv1;

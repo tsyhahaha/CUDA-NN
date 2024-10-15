@@ -66,6 +66,9 @@ class Tensor {
         // Tensor* sum(size_t d);
         // Tensor* mean(size_t d);
         Tensor* exp();
+        Tensor* log();
+        void exp_();
+        void log_();
 
         // Binary op
         Tensor* add(Tensor* tensor);

@@ -67,6 +67,9 @@ void kTransposeLast3D(float* d_data, float* d_out, size_t N, size_t m, size_t n
 __global__
 void kExp(float* d_data, float* d_out, int n_data);
 
+__global__
+void kLog(float* d_data, float* d_out, int n_data);
+
 /* add kernels */
 __global__
 void kAdd_l1(

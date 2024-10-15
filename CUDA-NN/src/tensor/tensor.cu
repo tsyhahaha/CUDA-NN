@@ -38,7 +38,6 @@ Tensor::~Tensor(){
 }
 
 void Tensor::fromVec(std::vector<float>& vec) {
-    printShape(this->shape);
     if(vec.size() != this->n_data) {
         ERROR("%ld != %ld, weight size not matched!\n", vec.size(), this->n_data);
     }
@@ -114,7 +113,7 @@ void Tensor::initialize(InitType type) {
         assert(shape.size() == 2 && shape[0] == shape[1]);
         int s = shape[0];
         for (int i=0; i < s; i++) {
-            for(int j=0; j<s; j++) {
+            for(int j=0; j < s; j++) {
                 if(i==j) h_d[i*s + j] = 1.0f;
                 else     h_d[i*s + j] = 0.0f;
             }
@@ -183,21 +182,21 @@ void Tensor::flatten() {
 
 void Tensor::transpose() {
     if(this->shape.size() == 2) {
-        float* d_out;
-        CHECK(cudaMalloc((float**)&d_out, this->n_data * sizeof(float)));
-        int x = this->shape[0], y = this->shape[1];
+        DimVector shape_o = this->shape;
+        std::swap(shape_o[1], shape_o[2]);
+        Tensor* tensor_o = new Tensor(shape_o);
+        
+        int row = this->shape[0], col = this->shape[1];
         dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
         // ATTENTION!!!
-        dim3 grid((y-1)/BLOCK_SIZE2D + 1, (x-1)/BLOCK_SIZE2D + 1);
+        dim3 grid((col-1)/BLOCK_SIZE2D + 1, (row-1)/BLOCK_SIZE2D + 1);
 
-        kTranspose<<<grid, block>>>(this->d_data, d_out, x, y);
+        kTranspose<<<grid, block>>>(this->d_data, tensor_o->d_data, row, col);
         CHECK_KERNEL();
 
-        // update this->d_data
-        float* prev = this->d_data;
-        this->d_data = d_out;
-        CHECK(cudaFree(prev));
-        std::swap(this->shape[0], this->shape[1]);
+        cudaFree(this->d_data);
+        this->d_data = tensor_o->d_data;
+        this->shape = shape_o;
     } else {
         ERROR("Transpose failed: the dim != 2.\n");
     }
@@ -205,7 +204,6 @@ void Tensor::transpose() {
 
 void Tensor::transpose(int dim1, int dim2) {
     size_t dim = this->getDim();
-    // DEBUG_PRINT("dim = %d, dim1 = %d, dim2 = %d\n", dim, dim1, dim2);
     if(dim1 < 0) dim1 = dim + dim1;
     if(dim2 < 0) dim2 = dim + dim2;
     int t = dim1 <= dim2 ? dim1 : dim2;
@@ -219,19 +217,24 @@ void Tensor::transpose(int dim1, int dim2) {
     if(dim == 2) {
         DEBUG_PRINT("HERE, dim1=%d, dim2=%d\n", dim1, dim2);
         this->transpose();
-    }
+    } else if(dim == 3) {
+        if(dim2 == dim - 1) {
+            DimVector shape_o = this->shape;
+            std::swap(shape_o[1], shape_o[2]);
+            Tensor* tensor_o = new Tensor(shape_o);
 
-    if(dim2 == dim - 1) {
-        size_t N = shape[0], m = shape[1], n = shape[2];
-        dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
-        dim3 grid((n-1)/BLOCK_SIZE2D + 1, (m-1)/BLOCK_SIZE2D+1);
+            size_t N = shape[0], row = shape[1], col = shape[2];
+            dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
+            dim3 grid((col-1)/BLOCK_SIZE2D + 1, (row-1)/BLOCK_SIZE2D+1);
 
-        // DEBUG_PRINT("N=%d, m=%d, n=%d\n", N, m, n);
-        kTransposeLast3D<<<grid, block>>>(this->d_data, this->d_data, N, m, n); CHECK_KERNEL();
+            kTransposeLast3D<<<grid, block>>>(this->d_data, tensor_o->d_data, N, row, col); CHECK_KERNEL();
 
-        std::swap(this->shape[1], this->shape[2]);
-    } else {
-        ERROR("dim1=%d, dim2=%d, Not implemented!\n", dim1, dim2);
+            cudaFree(this->d_data);
+            this->d_data = tensor_o->d_data;
+            this->shape = shape_o;
+        } else {
+            ERROR("dim1=%d, dim2=%d, Not implemented!\n", dim1, dim2);
+        }
     }
 }
 
@@ -254,13 +257,32 @@ Tensor* Tensor::exp() {
     return tensor_o;
 }
 
-// void Tensor::sqrt_() {
-//     dim3 block(BLOCK_SIZE1D);
-//     dim3 grid((this->n_data-1)/BLOCK_SIZE1D + 1);
-//     // need padding?
-//     kSqrt<<<grid, block>>>(this->d_data, this->n_data);
-//     CHECK_KERNEL();
-// }
+void Tensor::exp_() {
+    int n_data = this->n_data;
+    int block = BLOCK_SIZE1D;
+    int grid = (n_data - 1)/BLOCK_SIZE1D + 1;
+
+    kExp<<<grid, block>>>(this->d_data, this->d_data, n_data); CHECK_KERNEL();
+}
+
+Tensor* Tensor::log() {
+    DimVector shape_o = this->shape;
+    Tensor* tensor_o = new Tensor(shape_o);
+    int n_data = this->n_data;
+    int block = BLOCK_SIZE1D;
+    int grid = (n_data - 1)/BLOCK_SIZE1D + 1;
+
+    kLog<<<grid, block>>>(this->d_data, tensor_o->d_data, n_data); CHECK_KERNEL();
+    return tensor_o;
+}
+
+void Tensor::log_() {
+    int n_data = this->n_data;
+    int block = BLOCK_SIZE1D;
+    int grid = (n_data - 1)/BLOCK_SIZE1D + 1;
+
+    kLog<<<grid, block>>>(this->d_data, this->d_data, n_data); CHECK_KERNEL();
+}
 
 void Tensor::add_(float c) {
     dim3 block(BLOCK_SIZE1D);
@@ -330,9 +352,10 @@ void Tensor::max_(int dim, bool keepDim){
             dim3 grid(C, N);
             kMaxLastDim3D<<<grid, block>>>(this->d_data, this->d_data, N, C, L); CHECK_KERNEL();
 
-            shape[dim] = 1;
+            this->n_data /= this->shape[dim];
+            this->shape[dim] = 1;
             if(!keepDim) {
-                shape.erase(shape.begin() + dim);
+                this->shape.erase(shape.begin() + dim);
             }
         } else {
             ERROR("Not implementated!\n");
@@ -350,13 +373,13 @@ Tensor* Tensor::max(int dim, bool keepDim){
     Tensor* tensor_o = new Tensor(shape_o);
 
     if(dim < size) {
-        DEBUG_PRINT("size=%d, dim=%d\n", size, dim);
         if(size == 3 && dim==size-1) {
             size_t N=this->shape[0], C=this->shape[1], L=this->shape[2];
             int block = BLOCK_SIZE1D;   // BLOCK_SIZE could be larger
             dim3 grid(C, N);
             kMaxLastDim3D<<<grid, block>>>(this->d_data, tensor_o->d_data, N, C, L); CHECK_KERNEL();
 
+            tensor_o->n_data /= shape[dim];
             tensor_o->shape[dim] = 1;
             if(!keepDim) {
                 tensor_o->shape.erase(shape.begin() + dim);
@@ -369,6 +392,7 @@ Tensor* Tensor::max(int dim, bool keepDim){
 
             kMaxLastDim2D<<<grid, block>>>(this->d_data, tensor_o->d_data, C, L); CHECK_KERNEL();
 
+            tensor_o->n_data /= shape[dim];
             tensor_o->shape[dim] = 1;
             if(!keepDim) {
                 tensor_o->shape.erase(shape.begin() + dim);
@@ -378,27 +402,24 @@ Tensor* Tensor::max(int dim, bool keepDim){
             ERROR("Not implementated!\n");
         }
     }
-    return nullptr;
+    return tensor_o;
 }
 
 
 void Tensor::squeeze() {
-    DimVector& vec = this->shape;
-    vec.erase(std::remove(vec.begin(), vec.end(), 1), vec.end());
+    shape.erase(std::remove(shape.begin(), shape.end(), 1), shape.end());
 }
 
 void Tensor::squeeze(int idx) {
-    DimVector& vec = this->shape;
-    if(idx < vec.size() && vec[idx] == 1)
-        vec.erase(vec.begin() + idx);
+    if(idx < shape.size() && shape[idx] == 1)
+        shape.erase(shape.begin() + idx);
 }
 
 void Tensor::unsqueeze(int idx) {
-    DimVector& vec = this->shape;
-    if (idx >= 0 && idx <= vec.size()) {
-        vec.insert(vec.begin() + idx, 1);
+    if (idx >= 0 && idx <= shape.size()) {
+        shape.insert(shape.begin() + idx, 1);
     } else if(idx < 0) {
-        vec.insert(vec.end() + 1 + idx, 1);
+        shape.insert(shape.end() + 1 + idx, 1);
     }
 }
 
@@ -606,8 +627,6 @@ Tensor* Tensor::bmm(Tensor* tensor) {
     dim3 grid((K-1)/BLOCK_SIZE2D +1, (M-1)/BLOCK_SIZE2D+1);
 
     kBatchMatmul3D<<<grid, block>>>(this->d_data, tensor->d_data, tensor_o->d_data, bz, M, N, K); CHECK_KERNEL();
-
-    // printShape(tensor_o->getShape());
 
     return tensor_o;
 }

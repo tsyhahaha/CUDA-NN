@@ -9,7 +9,6 @@ class Module {
         std::string prefix;
     public:
 
-        virtual void load_weights() = 0;
         virtual Tensor* forward(Tensor* data) = 0;
         virtual Tensor* backward(Tensor* gradients) = 0;
 

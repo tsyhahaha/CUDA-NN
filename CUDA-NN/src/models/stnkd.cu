@@ -14,10 +14,10 @@ STNkd::STNkd(std::string prefix, size_t k) {
     this->relu = new ReLU(this->prefix + "relu.");
 
     this->bn1 = new BatchNorm1d(this->prefix+"bn1.", 64);
-    this->bn2 = new BatchNorm1d(this->prefix+"bn1.", 128);
-    this->bn3 = new BatchNorm1d(this->prefix+"bn1.", 1024);
-    this->bn4 = new BatchNorm1d(this->prefix+"bn1.", 512);
-    this->bn5 = new BatchNorm1d(this->prefix+"bn1.", 256);
+    this->bn2 = new BatchNorm1d(this->prefix+"bn2.", 128);
+    this->bn3 = new BatchNorm1d(this->prefix+"bn3.", 1024);
+    this->bn4 = new BatchNorm1d(this->prefix+"bn4.", 512);
+    this->bn5 = new BatchNorm1d(this->prefix+"bn5.", 256);
 }
 
 STNkd::~STNkd() {
@@ -25,7 +25,7 @@ STNkd::~STNkd() {
 }
 
 void STNkd::load_weights() {
-   this->conv1->load_weights();
+    this->conv1->load_weights();
     this->conv2->load_weights();
     this->conv3->load_weights();
 
@@ -42,22 +42,21 @@ void STNkd::load_weights() {
 
 Tensor* STNkd::forward(Tensor* data) {
     size_t bz = data->getShape()[0];
-    Tensor* x = bn1->forward(conv1->forward(data));
-    x = bn2->forward(conv2->forward(x));
-    x = bn3->forward(conv3->forward(x));
-    x->max_(-1, false);
+    Tensor* x = relu->forward(bn1->forward(conv1->forward(data)));
+    x = relu->forward(bn2->forward(conv2->forward(x)));
+    x = relu->forward(bn3->forward(conv3->forward(x)));
+    x->max_(2, false);
 
     x = relu->forward(bn4->forward(fc1->forward(x)));
     x = relu->forward(bn5->forward(fc2->forward(x)));
     x = fc3->forward(x);
 
-    Tensor* iden = new Tensor({k,k}, IDENTITY);
+    Tensor* iden = new Tensor({this->k,this->k}, IDENTITY);
     iden->flatten();
 
     Tensor* o = x->add(iden);
-    o->reshape({bz, k, k});
+    o->reshape({bz, this->k, this->k});
 
-    delete x;
     return o;
 }
 

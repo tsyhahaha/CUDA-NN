@@ -5,11 +5,7 @@ __global__
 void kReLU1D(float* A, float* d_out, int N) {
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     if (col < N) {
-        if(A[col] < 0.0f) {
-            d_out[col] = 0.0f;
-        } else {
-            d_out[col] = A[col];
-        }
+        d_out[col] = fmaxf(0.0f, A[col]);
     }
 }
 
@@ -27,9 +23,20 @@ void kReLU2D(float* A, float* d_out, int M, int N) {
 }
 
 
-ReLU::ReLU( bool inplace) {
+ReLU::ReLU(bool inplace) {
     this->inplace = inplace;
     this->input = nullptr;
+
+    // Prepare output for forward and backprop
+    this->output = nullptr;
+    this->outputBackward = nullptr;
+}
+
+ReLU::ReLU(std::string prefix, bool inplace) {
+    this->inplace = inplace;
+    this->input = nullptr;
+
+    this->prefix = prefix;
 
     // Prepare output for forward and backprop
     this->output = nullptr;
@@ -63,6 +70,5 @@ Tensor* ReLU::forward(Tensor* data) {
 }
  
 Tensor* ReLU::backward(Tensor* gradients) {
-    
     return nullptr;
 }

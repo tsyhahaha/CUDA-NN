@@ -3,13 +3,13 @@
 
 #include "configure.cuh"
 
-#include "module.cuh"
+// #include "module.cuh"
 #include "tensor.cuh"
 #include "layers.cuh"
 #include "encoder.cuh"
 
 class PointNet: public Module {
-    private:
+    public:
         Encoder* feat;
         Linear* fc1;
         Linear* fc2;
@@ -21,7 +21,8 @@ class PointNet: public Module {
         ReLU* relu;
 
     public:
-        PointNet(std::string prefix="", size_t k=10, bool normal_channel=false);
+        PointNet(std::string prefix, size_t k=10, bool normal_channel=false);
+        PointNet(size_t k=10, bool normal_channel=false);
         ~PointNet();
 
         void load_weights();

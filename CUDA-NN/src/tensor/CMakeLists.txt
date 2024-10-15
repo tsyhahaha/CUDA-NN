@@ -5,6 +5,6 @@ add_subdirectory(kernels)
 
 add_library(tensor ${TENSOR_SRC})
 
-target_link_libraries(tensor PRIVATE kernels)
+target_link_libraries(tensor PRIVATE kernels common)
 
 
