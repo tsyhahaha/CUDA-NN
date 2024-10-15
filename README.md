@@ -76,9 +76,9 @@ nvcc merged.cu -o train -Xcompiler "-O3 -std=c++14" -gencode arch=compute_60,cod
 ```
 
 ### 2. program beat
-To verify the correctness of the layers, it's a must to compare them with the official implementation by torch at the input/output level. To do this：
+To verify the correctness of the layers or models, it's a must to compare them with the official implementation by torch at the input/output level. To do this：
 
-* Ensure absolute or relative paths used in both cuda or python programs are correct.
+* Ensure absolute or relative paths used in both cuda or python programs are correct. Recommend: absolute path instead of relative path.
 * Write and ensure the infomation in `config.yaml` is matched.
 * Ensure `make run` successfully in the `CUDA-NN/build` directory.
 
@@ -89,12 +89,14 @@ python beat.py
 
 If all test points passed, you will get like:
 ```
-Test(python) module LINEAR
+Test(python) module POINTNET
+100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 10/10 [00:00<00:00, 21.80it/s]
 --------------------------------------------------
-Test(cuda) module LINEAR
+Test(cuda) module POINTNET
 --------------------------------------------------
-Beat(cuda) the outputs
+Beat the outputs
 --------------------------------------------------
+100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 10/10 [00:00<00:00, 2445.66it/s]
 [AC] Test all 10 points successfully!
 ```
 
