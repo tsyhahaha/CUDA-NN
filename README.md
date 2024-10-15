@@ -57,11 +57,45 @@ make run
 
 Helpful reference:
 * https://github.com/jpowie01/CUDA-DNN-MNIST
-* https://github.com/DeMoriarty/custom_matmul_kernels
 
 
+## *Other things for GPU course of UCAS*
 
+### 1. merge the project
+The profiller only supports submitting a single `.cu` file, so it's needed to merge the entire project into a single file. To run the merge script:
 
+```
+bash merge.sh test/main # the main cuda file
+```
 
+And use official `nvcc` to compile the `merged.cu` written in `compile.sh`:
+```
+nvcc merged.cu -o train -Xcompiler "-O3 -std=c++14" -gencode arch=compute_60,code=sm_60 -gencode arch=compute_61,code=sm_61 -gencode arch=compute_62,code=sm_62 -gencode arch=compute_70,code=sm_70 -lhdf5_cpp -lhdf5
+
+./train
+```
+
+### 2. program beat
+To verify the correctness of the layers, it's a must to compare them with the official implementation by torch at the input/output level. To do this：
+
+* Ensure absolute or relative paths used in both cuda or python programs are correct.
+* Write and ensure the infomation in `config.yaml` is matched.
+* Ensure `make run` successfully in the `CUDA-NN/build` directory.
+
+Then run:
+```
+python beat.py
+```
+
+If all test points passed, you will get like:
+```
+Test(python) module LINEAR
+--------------------------------------------------
+Test(cuda) module LINEAR
+--------------------------------------------------
+Beat(cuda) the outputs
+--------------------------------------------------
+[AC] Test all 10 points successfully!
+```
 
 
