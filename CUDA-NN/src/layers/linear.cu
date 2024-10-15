@@ -12,18 +12,21 @@ void kLinear2D(float* input, float* d_out, float* weights, float* bias, int M, i
 
     int phase = (N - 1) / TILE_SIZE + 1;
     for(int p=0; p<phase;p++) { 
-        if (row < M && p*TILE_SIZE + threadIdx.x < N && threadIdx.x < TILE_SIZE) {
-            // ds_A[ty][tx] = d_A[row][p*TILE_SIZE + tx]
+        if (row < M && threadIdx.x < TILE_SIZE) {
+            if(p*TILE_SIZE + threadIdx.x < N) {
             ds_A[threadIdx.y][threadIdx.x] = input[row*N + p*TILE_SIZE + threadIdx.x];
-        } else if(threadIdx.y < BLOCK_SIZE2D && threadIdx.x < TILE_SIZE) {
+            } else {
             ds_A[threadIdx.y][threadIdx.x] = 0.0f;
-        }
+            }
+       	}
         
-        if (col < K && p*TILE_SIZE + threadIdx.y < N && threadIdx.y < TILE_SIZE) {
-            // ds_B[tx][ty] = d_B[col][p*TILE_SIZE + ty]
-            ds_B[threadIdx.x][threadIdx.y] = weights[col*N + p*TILE_SIZE + threadIdx.y]; 
-        } else if(threadIdx.x < BLOCK_SIZE2D && threadIdx.y < TILE_SIZE) {
-            ds_B[threadIdx.x][threadIdx.y] = 0.0f;
+        if (col < K && threadIdx.y < TILE_SIZE) {
+            if(p*TILE_SIZE+threadIdx.y < N) {
+            ds_B[threadIdx.x][threadIdx.y] = weights[col*N + p*TILE_SIZE + threadIdx.y];
+            } else {
+                ds_B[threadIdx.x][threadIdx.y] = 0.0f;
+            }
+
         }
         if(threadIdx.y == 0)
             ds_bias[threadIdx.x] = bias[col];

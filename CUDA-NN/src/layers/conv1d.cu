@@ -3,7 +3,7 @@
 
 __global__
 void kConv1d(float* d_in, float* d_out, float* weights, float* bias, int C_in, int C_out, int L, int N) {
-    // kMatmulTransposed_l3: weights(C_out x C_in) @ d_in(B x C_in x L) + bias(C_out)= (B x C_out x L)
+    // weights(C_out x C_in) @ d_in(B x C_in x L) + bias(C_out)= (B x C_out x L)
     float cVal = 0.0f;
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
@@ -12,25 +12,28 @@ void kConv1d(float* d_in, float* d_out, float* weights, float* bias, int C_in, i
     __shared__ float ds_B[TILE_SIZE][BLOCK_SIZE2D];
     __shared__ float ds_bias[BLOCK_SIZE2D];
 
-    if (row >= C_out || col >= L) return;
-
-    ds_bias[threadIdx.y] = bias[row];
+    if(threadIdx.x==0)
+        ds_bias[threadIdx.y] = bias[row];
 
     for(int b=0; b<N; b++) {
         // batch b
+	cVal = 0.0f;
         int phase = (C_in - 1) / TILE_SIZE + 1;
         for(int p=0; p<phase;p++) {
-            if (row < C_out && p*TILE_SIZE + threadIdx.x < C_in && threadIdx.x < TILE_SIZE) {
-                ds_A[threadIdx.y][threadIdx.x] = weights[row*C_in + p*TILE_SIZE + threadIdx.x];
-            } else if(threadIdx.y < BLOCK_SIZE2D && threadIdx.x < TILE_SIZE) {
-                // PS: It's faster  if TILE_SIZE is a factor of the matrix dimension
-                ds_A[threadIdx.y][threadIdx.x] = 0.0f;
+            if (row < C_out && threadIdx.x < TILE_SIZE) {
+		if(p*TILE_SIZE + threadIdx.x < C_in) {
+		    ds_A[threadIdx.y][threadIdx.x] = weights[row*C_in + p*TILE_SIZE + threadIdx.x];
+		} else {
+		    ds_A[threadIdx.y][threadIdx.x] = 0.0f;
+		}
             }
 
-            if(p*TILE_SIZE + threadIdx.y < C_in && col < L && threadIdx.y < TILE_SIZE) {
-                ds_B[threadIdx.y][threadIdx.x] = d_in[b*C_in*L + (p*TILE_SIZE + threadIdx.y)*L + col];
-            } else if(threadIdx.y < TILE_SIZE && threadIdx.x < BLOCK_SIZE2D) {
-                ds_B[threadIdx.y][threadIdx.x] = 0.0f;
+            if(col < L && threadIdx.y < TILE_SIZE) {
+		if(p*TILE_SIZE + threadIdx.y < C_in){
+		     ds_B[threadIdx.y][threadIdx.x] = d_in[b*C_in*L + (p*TILE_SIZE + threadIdx.y)*L + col];
+		} else {
+			ds_B[threadIdx.y][threadIdx.x] = 0.0f;
+		}
             }
 
             __syncthreads();
@@ -40,8 +43,8 @@ void kConv1d(float* d_in, float* d_out, float* weights, float* bias, int C_in, i
             }
             __syncthreads();
         }
-        // printf("d_out[%d][%d][%d] = %f\n", b, row, col, cVal);
-        d_out[b*C_out*L + row*L + col] = cVal + ds_bias[threadIdx.y];
+        if(row < C_out && col < L)
+            d_out[b*C_out*L + row*L + col] = cVal + ds_bias[threadIdx.y];
     }
 
 }

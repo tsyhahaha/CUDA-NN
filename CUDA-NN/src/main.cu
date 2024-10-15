@@ -85,7 +85,7 @@ std::pair<ConfigMap, LayerParams> loadYamlConfig(const std::string& filename) {
     return {config, layers};
 }
 
-// 打印解析后的配置
+
 void printConfig(const ConfigMap& config, const std::map<std::string, std::string>& layer_params) {
     std::cout << "General Config:\n\n";
     for (ConfigMap::const_iterator it = config.begin(); it != config.end(); ++it) {
@@ -113,6 +113,8 @@ bool create_directory(const std::string& path) {
         }
     }
 }
+
+
 
 
 /****************************************************************************************
@@ -205,7 +207,7 @@ std::string getBaseName(const std::string& filename) {
 /* support to test single layer with its pretrained weights */
 int main(int argc, char *argv[]) {
 
-    std::string filename = "/home/course/taosiyuan241/CUDA-NN/config.yaml";
+    std::string filename = "/home/taosiyuan/cudaCode/CUDA-NN/config.yaml";
     // std::string filenale = argv[1];
     
     // Parse the yaml configuration
@@ -233,21 +235,19 @@ int main(int argc, char *argv[]) {
 
     std::map<std::string, std::string> cfg = config.second[layer_name];
     if(layer == "linear") {
-         nn = new Linear(toSizet(cfg["in_features"]), toSizet(cfg["out_features"]));
+        nn = new Linear(toSizet(cfg["in_features"]), toSizet(cfg["out_features"]));
         nn->load_weights(weight_params, "weights");
         nn->load_weights(bias_params, "bias");
     } else if(layer=="batchnorm1d") {
-        nn = new BatchNorm1d(toSizet(cfg["num_features"]));
+        nn = new BatchNorm1d(toSizet(cfg["in_channels"]));
         nn->load_weights(weight_params, "weights");
         nn->load_weights(bias_params, "bias");
         auto running_mean = read_param(param_file + ".running_mean.txt");
         auto running_var = read_param(param_file + ".running_var.txt");
-        nn->load_weights(running_mean, "mean");
-        nn->load_weights(running_var, "var");
+        static_cast<BatchNorm1d*>(nn)->load_weights(running_mean, "mean");
+        static_cast<BatchNorm1d*>(nn)->load_weights(running_var, "var");
     } else if(layer=="conv1d") {
-        printf("123\n");
         nn = new Conv1d(toSizet(cfg["in_channels"]), toSizet(cfg["out_channels"]), 1);
-        printf("HERE\n");
         nn->load_weights(weight_params, "weights");
         nn->load_weights(bias_params, "bias");
     } else {
@@ -269,7 +269,7 @@ int main(int argc, char *argv[]) {
             std::string base_name = getBaseName(test_file);
 
             test_file = test_dir + "/" + base_name;
-            DEBUG_PRINT("%s\n", test_file.c_str());
+            DEBUG_PRINT("[TESTING] %s\n", test_file.c_str());
 
             std::vector<float> data_vec = read_param(test_file + ".txt");
             std::vector<size_t> shape = read_shape(test_file + ".shape.txt");

@@ -5,10 +5,11 @@
 #define BLOCK_SIZE1D 4
 #define BLOCK_SIZE2D 16
 // less than the minimum value of the column and column of the matrix involved in the calculation
-#define TILE_SIZE 3
+#define TILE_SIZE 16
 #define BLOCK_SIZE3D 4  
 
 #include<vector>
+#include<string>
 #include<map>
 #include<stdio.h>
 
