@@ -51,12 +51,18 @@ should_add_line() {
 # 定义合并的顺序，将 kernels 文件夹放在最前面
 folders=("tensor/kernels" "common" "tensor" "layers" "models")
 
-specific_folders=("models")
-specific_seq=("module" "stn3d" "stnkd" "encoder" "pointnet")
+# 使用关联数组来指定特定文件夹及其对应的编译顺序
+declare -A specific_folders
+specific_folders=(
+    ["models"]="stn3d stnkd encoder pointnet"
+    ["layers"]="module base"  # 添加更多的文件夹及其顺序
+)
+
+# specific_folders=("models")
+# specific_seq=("module" "stn3d" "stnkd" "encoder" "pointnet")
 
 # 用于存储所有的尖括号 include 语句
 includes=""
-
 
 
 # 合并 include 文件夹中的 .cuh 文件
@@ -73,10 +79,6 @@ if [ -d "$include_folder" ]; then
             fi
             last_line="$line"
         done < "$file"
-        # 如果最后一行是非空行，确保它被写入
-        # if [ -n "$last_line" ]; then
-        #     echo "$last_line" >> $output
-        # fi
         
         echo -e "\n" >> $output  # 每个文件末尾加一个空行
     done
@@ -84,31 +86,32 @@ fi
 
 # 遍历文件夹，按照指定顺序合并 .cu 文件
 for folder in "${folders[@]}"; do
+    merged_files=()
     echo "Merging folder: $folder"
 
-    if [[ "$folder" == "$specific_folders" ]]; then
-        # 如果当前文件夹是 specific_folders，则按照 specific_seq 的顺序合并文件
-        for file_prefix in "${specific_seq[@]}"; do
+    if [[ -v specific_folders[$folder] ]]; then
+        # 如果当前文件夹是 specific_folders，则按照指定顺序合并文件
+        for file_prefix in ${specific_folders[$folder]}; do
             for ext in "cuh" "cu"; do
-                # 查找特定前缀的文件并合并
                 file="$base/$folder/$file_prefix.$ext"
                 if [[ -f "$file" ]]; then
                     echo "// Merging: $file" >> $output
-                    last_line=""
                     while IFS= read -r line || [ -n "$line" ]; do
                         should_add_line "$line"
                         if [[ $? -eq 0 ]]; then
-                            echo "$line" >> $output  # 添加行到输出文件
+                            echo "$line" >> $output
                         fi
-                        last_line="$line"
                     done < "$file"
-                    echo -e "\n" >> $output  # 每个文件末尾加一个空行
+                    echo -e "\n" >> $output  
+                    merged_files+=("$file")
                 fi
             done
         done
-    else
-        # 先处理当前文件夹中的 .cuh 文件
-        for file in $(find $base/$folder -maxdepth 1 -name "*.cuh" | sort); do
+    fi
+
+    # 处理当前文件夹中其他的 .cuh 文件
+    for file in $(find $base/$folder -maxdepth 1 -name "*.cuh" | sort); do
+        if [[ ! " ${merged_files[*]} " =~ " $file " ]]; then
             echo "// Merging: $file" >> $output
             last_line=""
 
@@ -120,27 +123,27 @@ for folder in "${folders[@]}"; do
                 fi
                 last_line="$line"
             done < "$file"
+            echo -e "\n" >> $output 
+        fi
+    done
 
-            echo -e "\n" >> $output  # 每个文件末尾加一个空行
-        done
-
-        # 查找当前文件夹中的 .cu 文件并添加到输出文件中，不递归查找子文件夹
-        for file in $(find $base/$folder -maxdepth 1 -name "*.cu" | sort); do
+    for file in $(find $base/$folder -maxdepth 1 -name "*.cu" | sort); do
+        if [[ ! " ${merged_files[*]} " =~ " $file " ]]; then
             echo "// Merging: $file" >> $output
             last_line=""
             
-            # 处理文件，提取尖括号 include 语句，并删除双引号 include 和 #ifndef, #define, #endif
             while IFS= read -r line || [ -n "$line" ]; do
                 should_add_line "$line"
                 if [[ $? -eq 0 ]]; then
-                    echo "$line" >> $output  # 添加行到输出文件
+                    echo "$line" >> $output
                 fi
                 last_line="$line"
             done < "$file"
 
-            echo -e "\n" >> $output  # 每个文件末尾加一个空行
-        done
-    fi
+            echo -e "\n" >> $output
+        fi
+    done
+
 done
 
 

@@ -62,6 +62,10 @@ Helpful reference:
 ## *Other things for GPU course of UCAS*
 
 ### 1. merge the project
+Versions in the course server(Ubuntu 18.04):
+* nvcc: 12.1
+* gcc: 7.5
+
 The profiller only supports submitting a single `.cu` file, so it's needed to merge the entire project into a single file. To run the merge script:
 
 ```
@@ -74,6 +78,8 @@ nvcc merged.cu -o train -Xcompiler "-O3 -std=c++14" -gencode arch=compute_60,cod
 
 ./train
 ```
+
+*PS: the compile process may fail for the version of gcc or the arch of the GPU. Please check the relevant correspondence if got error.*
 
 ### 2. program beat
 To verify the correctness of the layers or models, it's a must to compare them with the official implementation by torch at the input/output level. To do this：
