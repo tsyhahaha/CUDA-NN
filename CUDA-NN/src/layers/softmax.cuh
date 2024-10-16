@@ -1,3 +1,4 @@
+#pragma once
 #ifndef SFM_H
 #define SFM_H
 

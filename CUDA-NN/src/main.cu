@@ -200,7 +200,7 @@ std::string getBaseName(const std::string& filename) {
     return filename; 
 }
 
-auto getModel(const std::string& target, const std::string& name, std::map<std::string, std::string>& cfg, std::string& param_file) {
+Module* getModel(const std::string& target, const std::string& name, std::map<std::string, std::string>& cfg, std::string& param_file) {
     Module* nn;
     if(target=="model") {
         Configurer::set_global_weights(read_params(param_file));
@@ -251,7 +251,7 @@ void test_module(
     std::string& param_file, std::string& data_dir, 
     std::map<std::string, std::string> cfg){
 
-    auto nn = getModel(target, name, cfg, param_file);
+    Module* nn = getModel(target, name, cfg, param_file);
     DEBUG_PRINT("Load weights to %s\n", name.c_str());
 
     // load beat test points

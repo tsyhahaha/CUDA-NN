@@ -1,3 +1,4 @@
+#pragma once
 #ifndef BN1D_H
 #define BN1D_H
 

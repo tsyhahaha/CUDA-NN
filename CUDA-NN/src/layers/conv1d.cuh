@@ -1,3 +1,4 @@
+#pragma once
 #ifndef CONV1D_H
 #define CONV1D_H
 
