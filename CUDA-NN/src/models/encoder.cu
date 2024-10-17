@@ -60,8 +60,10 @@ Tensor* Encoder::forward(Tensor* data) {
     // x = bn1->forward(conv1->forward(x));
     x = relu->forward(bn1->forward(conv1->forward(x)));
 
+    Tensor* trans_feat;
+
     if(this->feature_transform) {
-        Tensor* trans_feat = fstn->forward(x);
+        trans_feat = fstn->forward(x);
         x->transpose(2, 1);
         Tensor* f_trans = x->bmm(trans_feat);    // track f_trans
         x = f_trans;
@@ -76,6 +78,12 @@ Tensor* Encoder::forward(Tensor* data) {
     if self.global_feat:
         return x, trans, trans_feat
     */
+
+    // clean up
+    // delete trans;
+    // if(this->feature_transform) {
+    //     delete trans_feat;
+    // }
 
     if(this->global_feat) {
         return x;

@@ -10,9 +10,9 @@ class BaseLayer: public Module {
         Tensor* weights = nullptr;
         Tensor* bias = nullptr;
 
-        Tensor* input;
-        Tensor* output;
-        Tensor* outputBackward;
+        Tensor* input = nullptr;
+        Tensor* output = nullptr;
+        Tensor* outputBackward = nullptr;
         // Tensor* deltaWeights;
         // Tensor* deltaBias;
     public:
@@ -29,9 +29,7 @@ class BaseLayer: public Module {
         void load_weights(std::vector<float>& params, const std::string& target);
 
         void load_weights();
-
-        virtual Tensor* forward(Tensor* data) = 0;
-        // virtual Tensor* backward(Tensor* gradients) = 0;
+        void reset();
 };
 
 #endif /* !BASE_H */

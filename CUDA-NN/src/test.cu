@@ -10,7 +10,7 @@
 #include <map>
 #include <dirent.h>
 #include <cstring>
-// #include <hdf5/serial/H5Cpp.h>
+#include <hdf5/serial/H5Cpp.h>
 
 #include "configure.cuh"
 #include "layers.cuh"
@@ -153,7 +153,7 @@ int main(int argc, char *argv[]) {
     PointNet* pointnet = new PointNet();
     pointnet->load_weights();
 
-    std::string file_path = "./data/test_point_clouds.h5";
+    std::string file_path = "/home/course/test_point_clouds.h5";
     std::vector<std::vector<float>> list_of_points;
     std::vector<int> list_of_labels;
     // 读取训练集数据
@@ -161,15 +161,35 @@ int main(int argc, char *argv[]) {
 
     // 开始计时，使用chrono计时，不支持其它计时方式
     auto start = std::chrono::high_resolution_clock::now();
+
+    unsigned int right_num = 0;
     
     for (size_t i = 0; i < list_of_points.size(); i++) {
-        
+        size_t n_data = list_of_points[i].size() / 3;
+        Tensor* input = new Tensor({3, n_data});
+        input->unsqueeze(0);
+        input->fromVec(list_of_points[i]);
+        Tensor* output = pointnet->forward(input);
+        Tensor* pred = output->argmax(-1);
+        pred->squeeze();
+
+        float* pred_label = pred->toHost();
+
+        if(int(pred_label[0]+0.5) == list_of_labels[i]) {
+            right_num++;
+        }
+
     
         std::cout << "Points " << i << ": ";
-        for (const auto& point : list_of_points[i]) {
-            std::cout << point << " ";
-        }
-        std::cout << "\nLabel: " << list_of_labels[i] << std::endl;
+        printf("%d", int(pred_label[0]+0.5));
+        // for (const auto& point : list_of_points[i]) {
+        //     std::cout << point << " ";
+        // }
+        std::cout << "\tLabel: " << list_of_labels[i] << std::endl;
+
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = end - start;
+        std::cout << "Time: " << diff.count() << "s" << std::endl;
     }
     
     // 向主机端同步以等待所有异步调用的GPU kernel执行完毕，这句必须要有
@@ -180,7 +200,7 @@ int main(int argc, char *argv[]) {
     std::chrono::duration<double> diff = end - start;
 
     // 输出结果，请严格保持此输出格式，并把0.0001替换成实际的准确率，请不要输出除了此结果之外的任何内容！！！
-    std::cout << std::fixed << std::setprecision(4) << diff.count() << ":0.0001";
+    std::cout << std::fixed << std::setprecision(4) << diff.count() << right_num << "/" << list_of_points.size() << " (" << (right_num / (float)list_of_points.size()) * 100 << "%)" << std::endl;
 
     return 0;
 }

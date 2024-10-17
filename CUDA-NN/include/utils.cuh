@@ -35,11 +35,19 @@ do \
     CHECK(cudaDeviceSynchronize());  \
 } while(0)
 
+#define printShape(shape) \
+do { \
+    std::string s = "shape: ("; \
+    for(int i=0; i<shape.size() - 1; i++) {\
+        s += std::to_string(shape[i]) + ", ";\
+    }\
+    s += std::to_string(shape[shape.size()-1]) + ")";\
+    DEBUG_PRINT("%s\n", s.c_str());\
+} while(0)
+
 void setGPU(const int GPU_idx);
 
 float* loadWeightsFromTxt(const char* filename, std::vector<size_t> shape);
-
-void printShape(std::vector<size_t> shape);
 
 void printM(float* weight, const std::vector<size_t> shape);
 

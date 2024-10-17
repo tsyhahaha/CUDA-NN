@@ -11,33 +11,6 @@
 #include <cuda.h>
 #include "cuda_runtime.h"
 
-/* Layer specific kernels*/
-
-__global__
-void kLinear2D(float* input, float* d_out, float* weights, float* bias, int M, int N, int K);
-
-__global__
-void kDropout1D(float* A, float* d_out, int N);
-
-__global__
-void kReLu1D(float* A, float* d_out, int N);
-
-__global__
-void kReLu2D(float* A, float* d_out, int M, int N);
-
-__global__ 
-void kBn1d_l2(float* d_data, float* d_out, float* weights, float* bias, 
-    float* mean, float* var, float eps, int N, int C
-);
-
-__global__ 
-void kBn1d_l3(float* d_data, float* d_out, float* weights, float* bias, 
-    float* mean, float* var, float eps, int N, int C, int L
-);
-
-__global__
-void kConv1d(float* d_in, float* d_out, float* weights, float* bias, int C_in, int L, int C_out, int N);
-
 /* unary op */
 
 __global__
@@ -49,6 +22,10 @@ void kMaxLastDim3D(float* d_data, float* d_out, size_t N, size_t C, size_t L);
 
 __global__
 void kMaxLastDim2D(float* d_data, float* d_out, size_t C, size_t L
+);
+
+__global__
+void kArgmaxLastDim2D(float* d_data, float* d_out, size_t C, size_t L
 );
 
 __global__

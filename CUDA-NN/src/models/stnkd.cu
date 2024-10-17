@@ -57,6 +57,9 @@ Tensor* STNkd::forward(Tensor* data) {
     Tensor* o = x->add(iden);
     o->reshape({bz, this->k, this->k});
 
+    // clean up
+    // delete x, iden;
+
     return o;
 }
 

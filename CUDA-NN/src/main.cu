@@ -27,6 +27,8 @@
 using ConfigMap = std::map<std::string, std::string>;  // 全局配置项
 using LayerParams = std::map<std::string, std::map<std::string, std::string>>;  // 层的参数
 
+int data_num;
+
 // 解析 YAML 文件
 std::pair<ConfigMap, LayerParams> loadYamlConfig(const std::string& filename) {
     std::ifstream file(filename);
@@ -261,8 +263,10 @@ void test_module(
     std::vector<std::string> test_points;
     test_points = get_files_in_directory(test_dir);
 
-    auto start = std::chrono::high_resolution_clock::now();
+    float count_sum = 0.0;
+    int i=0;
     for(std::string test_file: test_points) {
+        if(i>=data_num) break; i++;
         if(test_file.find("shape") == std::string::npos) {
             std::string base_name = getBaseName(test_file);
 
@@ -273,20 +277,27 @@ void test_module(
             std::vector<size_t> shape = read_shape(test_file + ".shape.txt");
 
             Tensor* input = new Tensor(data_vec.data(), shape);
+            auto start = std::chrono::high_resolution_clock::now();
             Tensor* output = nn->forward(input);
-
+            auto end = std::chrono::high_resolution_clock::now();
+            
+            if (target == "model" && name == "pointnet") {
+                output = output->argmax(-1, false);
+            }
+            // log time
             std::vector<float> output_vec = output->toVec();
+            std::chrono::duration<double> diff = end - start;
+            count_sum += diff.count();
+            DEBUG_PRINT("Single-point inference time consumed: %.4f\n", diff.count());
+            // save for program beat
             std::string output_file = output_dir + "/" + base_name + ".txt";
             save_vector_to_txt(output_file, output_vec);
         }
     }
+
+    DEBUG_PRINT("Average time consumed: %.4f s\n", count_sum / test_points.size());
     
     cudaDeviceSynchronize();
-
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> diff = end - start;
-
-    std::cout << std::fixed << std::setprecision(4) << diff.count() << "s\n";
 }
 
 void test_op(
@@ -302,7 +313,9 @@ void test_op(
     test_points = get_files_in_directory(test_dir);
 
     auto start = std::chrono::high_resolution_clock::now();
+    int i=0; float count_sum = 0.0;
     for(std::string test_file: test_points) {
+        if(i>=data_num) break; i++;
         if(test_file.find("shape") == std::string::npos) {
             std::string base_name = getBaseName(test_file);
             test_file = test_dir + "/" + base_name;
@@ -311,30 +324,34 @@ void test_op(
             std::vector<size_t> shape = read_shape(test_file + ".shape.txt");
             Tensor* input = new Tensor(data_vec.data(), shape);
             std::vector<float> output_vec;
+            auto start = std::chrono::high_resolution_clock::now();
             if(name == "max") {
                 input->max_(2, false);
                 output_vec = input->toVec();
             } else {
                 ERROR("Not implemented op %s!\n", name.c_str());
             }
+            auto end = std::chrono::high_resolution_clock::now();
+
+            // log time
+            std::chrono::duration<double> diff = end - start;
+            count_sum += diff.count();
+            DEBUG_PRINT("Single-point inference time consumed: %.4f\n", diff.count());
 
             std::string output_file = output_dir + "/" + base_name + ".txt";
             save_vector_to_txt(output_file, output_vec);
         }
     }
+
+    DEBUG_PRINT("Average time consumed: %.4f s\n", count_sum / test_points.size());
     
     cudaDeviceSynchronize();
-
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> diff = end - start;
-
-    std::cout << std::fixed << std::setprecision(4) << diff.count() << "s\n";
 }
 
 /* support to test single layer with its pretrained weights */
 int main(int argc, char *argv[]) {
 
-    std::string filename = "/home/taosiyuan/cudaCode/CUDA-NN/config.yaml";
+    std::string filename = "/home/course/taosiyuan241/CUDA-NN/config.yaml";
     
     // Parse the yaml configuration
     std::pair<ConfigMap, LayerParams> config = loadYamlConfig(filename);
@@ -348,6 +365,9 @@ int main(int argc, char *argv[]) {
 
     std::string param_file = config.first["param_path"];   // weights filename without postfix like .weights.txt, .bias.txt
     std::string data_dir = config.first["data_dir"];     // this test points dir
+    std::string data_num_str = config.first["data_num"];     // this test points dir
+    data_num = std::stoi(data_num_str);
+    printf("data_num: %s\n", data_num_str.c_str());
 
     DEBUG_PRINT("Finished loading yaml config.\n");
     std::map<std::string, std::string> cfg = config.second[name];

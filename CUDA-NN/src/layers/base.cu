@@ -50,6 +50,13 @@ void BaseLayer::load_weights(std::vector<float>& params, const std::string& targ
     }
 }
 
+void BaseLayer::reset(){
+    if(this->output != nullptr) {
+        delete this->output;
+        this->output = nullptr;
+    }
+}
+
 // Tensor* Layer::getDeltaweightss() {
 //     return this->deltaweightss;
 // }

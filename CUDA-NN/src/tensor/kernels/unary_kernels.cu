@@ -58,16 +58,61 @@ void kMaxLastDim2D(float* d_data, float* d_out, size_t C, size_t L
         // reduce max and save to `cur_max`
         for(int stride=blockDim.x/2; stride>0; stride>>=1) {
             if(tid < stride && tid + stride + i*BLOCK_SIZE1D < L) {
-                sd_M[tid] = sd_M[tid] > sd_M[tid + stride]? sd_M[tid] : sd_M[tid+stride];
+                sd_M[tid] = sd_M[tid] > sd_M[tid + stride] ? sd_M[tid] : sd_M[tid+stride];
             }
             __syncthreads();
         }
         cur_max = cur_max >= sd_M[0] ? cur_max : sd_M[0];
     }
 
-
     if (tid==0 && x < C)
         d_out[x] = cur_max;
+}
+
+__global__
+void kArgmaxLastDim2D(float* d_data, float* d_out, size_t C, size_t L
+) {
+    // It'll be faster if blocksize is the factor of L.
+    // int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int x = blockIdx.x;
+    int tid = threadIdx.x;
+
+    __shared__ float sd_M[BLOCK_SIZE1D];
+    __shared__ unsigned int sd_idx[BLOCK_SIZE1D];
+    float cur_max = 0.0f;
+    unsigned int cur_idx = 0;
+    bool ge = 0;
+
+    int iter = (L-1)/BLOCK_SIZE1D + 1;
+    for(int i=0; i<iter; i++) {
+        if (i*BLOCK_SIZE1D + tid < L) {
+            sd_M[tid] = d_data[x*L + i*BLOCK_SIZE1D + tid];
+            sd_idx[tid] = i*BLOCK_SIZE1D + tid;
+        } else {
+            sd_M[tid] = 0.0f;
+            sd_idx[tid] = 0;
+        }
+        __syncthreads();
+
+        // reduce max and save to `cur_max`
+        for(int stride=blockDim.x/2; stride>0; stride>>=1) {
+            if(tid < stride) {
+                ge = sd_M[tid] > sd_M[tid + stride];
+                sd_M[tid] = ge ? sd_M[tid] : sd_M[tid+stride];
+                sd_idx[tid] = ge ? sd_idx[tid] : sd_idx[tid+stride];
+            }
+            __syncthreads();
+        }
+        ge = cur_max >= sd_M[0];
+        cur_max = ge ? cur_max : sd_M[0];
+        cur_idx = ge ? cur_idx : sd_idx[0];
+    }
+
+
+    if (tid==0 && x < C){
+        // printf("d_out[%d] = %d\n",x, cur_idx);
+        d_out[x] = cur_idx;
+    }
 }
 
 __global__

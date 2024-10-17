@@ -2,7 +2,7 @@
 #ifndef CONF_H
 #define CONF_H
 
-#define BLOCK_SIZE1D 128
+#define BLOCK_SIZE1D 256
 #define BLOCK_SIZE2D 16
 // less than the minimum value of the column and column of the matrix involved in the calculation
 #define TILE_SIZE 16

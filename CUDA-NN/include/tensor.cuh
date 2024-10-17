@@ -62,6 +62,7 @@ class Tensor {
         Tensor* sum(int dim);
         float mean();
         Tensor* max(int dim, bool keepDim=true);
+        Tensor* argmax(int dim, bool keepDim=true);
         void max_(int dim, bool keepDim=true);
         // Tensor* sum(size_t d);
         // Tensor* mean(size_t d);

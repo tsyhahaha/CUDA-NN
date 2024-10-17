@@ -125,6 +125,10 @@ Tensor* BatchNorm1d::forward(Tensor* data) {
         // Dependency: Tensor.mean(size_t dim);
         ERROR("not implemented!");
     }
+    this->reset();
+    if(this->is_training) {
+        this->input = data;
+    }
 
     size_t dim = data->getDim();
     if(dim == 2) {

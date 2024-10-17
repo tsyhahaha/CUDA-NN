@@ -44,11 +44,15 @@ ReLU::ReLU(std::string prefix, bool inplace) {
 }
 
 ReLU::~ReLU() {
-    delete input, output, outputBackward;
+    delete input;
+    delete output;
+    delete outputBackward;
 }
 
 Tensor* ReLU::forward(Tensor* data) {
-    this->input = data;
+    this->reset();
+    if(this->is_training)
+        this->input = data;
 
     DimVector shape_o = data->getShape(); // deep copy auto?
     int dim = shape_o.size();

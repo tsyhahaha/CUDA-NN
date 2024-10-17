@@ -9,8 +9,16 @@ SoftMax::SoftMax(size_t dim) {
     this->dim = dim;
 }
 
+SoftMax::~SoftMax() {
+    delete this->input;
+    delete this->output;
+}
+
 Tensor* SoftMax::forward(Tensor* data) {
-    this->input = data;
+    this->reset();
+    if(this->is_training)
+        this->input = data;
+    
     Tensor* x_max = data->max(this->dim);
     Tensor* z = data->sub(x_max);
     Tensor* nominator = z->exp();

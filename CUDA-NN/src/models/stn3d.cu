@@ -56,6 +56,9 @@ Tensor* STN3d::forward(Tensor* data) {
     Tensor* o = x->add(iden);
     o->reshape({bz, 3, 3});
 
+    // clean up
+    // delete x, iden;
+
     return o;
 
 }

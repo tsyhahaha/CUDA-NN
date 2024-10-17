@@ -88,7 +88,11 @@ Conv1d::Conv1d(size_t in_channels, size_t out_channels, size_t kernel_size, bool
 }
 
 Conv1d::~Conv1d() {
-    delete weights, bias, input, output, outputBackward;
+    delete weights;
+    delete bias;
+    delete input;
+    delete output;
+    delete outputBackward;
 }
 
 /*
@@ -101,7 +105,9 @@ im2col to accelerate conv1d op
  - output(reshape): (N x C_out x L_in) or (C_out x L_in)
 */
 Tensor* Conv1d::forward(Tensor* data) {
-    this->input = data;
+    this->reset();
+    if(this->is_training)
+        this->input = data;
 
     size_t dim = data->getDim();
     DimVector shape_in = data->getShape();

@@ -35,9 +35,17 @@ Dropout::Dropout(float p, bool inplace) {
     this->outputBackward = nullptr;
 }
 
+Dropout::~Dropout() {
+    delete this->input;
+    delete this->output;
+    delete this->outputBackward;
+}
+
 
 Tensor* Dropout::forward(Tensor* data) {
-    this->input = data;
+    this->reset();
+    if(this->is_training)
+        this->input = data;
 
     DimVector shape_o = data->getShape(); 
     int dim = shape_o.size();

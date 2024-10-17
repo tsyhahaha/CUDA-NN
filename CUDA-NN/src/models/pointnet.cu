@@ -59,7 +59,7 @@ Tensor* PointNet::forward(Tensor* data) {
     // x = F.relu(self.bn2(self.dropout(self.fc2(x))))
     x = relu->forward(bn2->forward(fc2->forward(x)));
     x = fc3->forward(x);     // (B x num_classes)
-    x = softmax->forward(x);
+    // x = softmax->forward(x);
 
     return x;
 }

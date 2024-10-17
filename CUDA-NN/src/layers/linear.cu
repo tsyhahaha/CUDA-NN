@@ -121,12 +121,20 @@ Linear::Linear(size_t in_features, size_t out_features, bool bias, InitType init
 }
 
 Linear::~Linear() {
-    delete weights, bias, input, output, outputBackward;
+    delete weights;
+    delete bias;
+    delete input;
+    delete output;
+    delete outputBackward;
 }
 
 Tensor* Linear::forward(Tensor* data) {
     // data(B x N) @ weightss(M x N).T + bias(M) = output(B x M)
-    this->input = data;
+    // reinitializations
+    this->reset();
+    if(this->is_training)
+        this->input = data;
+    
     if(data->getDim() != 2) {
         printShape(data->getShape());
         if(this->prefix != "") {
@@ -139,23 +147,12 @@ Tensor* Linear::forward(Tensor* data) {
 
     this->output = new Tensor({bz, out_features});
 
-
-    // Tensor* mul_o = data->matmul(this->weights);  // keep the batch dim at the first dimension
-
-    // if(this->bias){
-    //     this->output = mul_o->add(this->bias);
-    //     delete mul_o;
-    // }
-    // else {
-    //     this->output = mul_o;
-    // }
-
     dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
     dim3 grid((out_features - 1)/BLOCK_SIZE2D+1, (bz-1)/BLOCK_SIZE2D + 1);
 
     kLinear2D<<<grid, block>>>(data->getData(), output->getData(), weights->getData(), bias->getData(), bz, in_features, out_features); CHECK_KERNEL();
 
-    if(this->output->getShape()[0] != input->getShape()[0] ||  \
+    if(this->output->getShape()[0] != data->getShape()[0] ||  \
             this->output->getShape()[1] != weights->getShape()[0]) {
                 printShape(this->output->getShape());
                 ERROR("shape not matched!\n");
