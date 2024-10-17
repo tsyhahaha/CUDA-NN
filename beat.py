@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import yaml
 
@@ -20,6 +21,9 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
 beat_dir = ""
+target = ""
+name = ""
+data_num = 0
 
 def clear_directory(dir_path):
     for filename in os.listdir(dir_path):
@@ -33,11 +37,10 @@ def clear_directory(dir_path):
 def gen(cfg):
     clear_directory(beat_dir)
     num, save_dir = cfg['data_num'], beat_dir
-    print("-"*50)
     print(f"Generate test points for {cfg['name'].upper()}")
     for i in tqdm(range(num)):
         shape = ()
-        B, L = random.randint(1, 16), random.randint(64, 128)
+        B, L = random.randint(1, 8), random.randint(64, 128)
         if cfg['target'] == 'model':
             if cfg['name'] in ["pointnet", 'stn3d', 'encoder']:
                 shape = (B, 3, L)
@@ -85,6 +88,7 @@ def load_model_params_and_buffers_from_txt(model, directory):
     return model
 
 def test_py(cfg):
+    print(f"Test(python) module {cfg['name'].upper()}")
     pyout_dir = cfg['data_dir'] + "/pyout"
     os.makedirs(pyout_dir, exist_ok=True)
     clear_directory(pyout_dir)
@@ -128,23 +132,30 @@ def test_py(cfg):
     if isinstance(net, nn.Module):
         net = net.eval().cuda().float()
 
-    print(f"Test(python) module {cfg['name'].upper()}")
-
     files = os.listdir(beat_dir)
     files = [s[:-4] for s in files if 'shape' not in s]
-    for file in tqdm(files):
+
+    time_sum = 0
+
+    for i in tqdm(range(min(data_num, len(files)))):
+        file = files[i]
         out_file = os.path.join(pyout_dir, file+".txt")
         file = os.path.join(beat_dir, file)
         shape = tuple(np.loadtxt(file+".shape.txt", dtype=int))
         data = np.loadtxt(file+".txt", dtype=np.float32)
         data = torch.from_numpy(data).reshape(shape).cuda()
+        time_start = time.time()
         if cfg['name'] == 'pointnet':
             output, _ = net(data.to(torch.float32))
+            output = torch.argmax(output, dim=1)
         elif cfg['name'] == 'encoder':
             output, _, __ = net(data.to(torch.float32))
         else:
             output = net(data.to(torch.float32))
+        time_end = time.time()
+        time_sum += time_end - time_start
         np.savetxt(out_file, output.detach().cpu().numpy().flatten(), fmt='%.06f')
+    print("Average time cost: ", round(time_sum/len(files), 4),'s')
     print("-"*50)
 
 def test_cu(cfg):
@@ -162,18 +173,35 @@ def test_cu(cfg):
     if result.returncode != 0:
         print("[ERROR] Failed to launch the cuda program!")
         exit(-1)
+    
+    pattern = r'Average time consumed: ([0-9]*\.[0-9]+) s'
+    content = result.stdout
+    matches = re.findall(pattern, content)
+    for match in matches:
+        print(f'Extracted average time: {match}')
     os.chdir(cur)
     print("-"*50)
 
 def beat(pyout, cuout):
     print(f"Beat the outputs")
-    print("-"*50)
+    
+    if target == 'model' and name == 'pointnet':
+        print(" - using argmax to compare the output of pointnet")
+
     def _check_file(f1, f2):
         data1 = np.loadtxt(f1, dtype=float)
         data2 = np.loadtxt(f2, dtype=float)
         if data1.size != data2.size:
             raise ValueError(f"{f1} data size not equal: {data1.size}!={data2.size}")
-
+        # if target == 'model' and name == 'pointnet':
+        #     # point net output is a 2D tensor(B, C=10), we need to compare the argmax
+        #     data1 = np.argmax(data1.reshape(-1, 10), axis=1)
+        #     data2 = np.argmax(data2.reshape(-1, 10), axis=1)
+        #     is_error = (data1 != data2).any()
+        #     error_num = np.sum(is_error)
+        #     string = "error_rate={%f}"%error_num/data1.size
+        #     return is_error, error_num <= (data1.size//2), string
+        # else:
         mask = data1 > 1e-6     # for layers like relu
         mean_error = np.sum(np.abs(data1 - data2) * mask) / np.sum(data1 * mask) / np.sum(mask)   # mean error scale
         is_error = mean_error >= 1e-4
@@ -185,7 +213,10 @@ def beat(pyout, cuout):
     files = os.listdir(pyout)
     partial_dict = {}
     error_list = []
-    for file in tqdm(files):
+
+
+    for i in tqdm(range(min(data_num, len(files)))):
+        file = files[i]
         f1 = os.path.join(pyout, file)
         f2 = os.path.join(cuout, file)
         wrong, partial, output = _check_file(f1, f2)
@@ -195,15 +226,20 @@ def beat(pyout, cuout):
             error_list.append(file)
     error_list = sorted(error_list, key=lambda x: int(x.split('.')[0]))
     partial_items = sorted(partial_dict.items(), key=lambda x: int(x[0].split('.')[0]))
+    print("-"*50)
     return partial_items, error_list
 
 def main():
     with open('./config.yaml','r') as f:
         cfg = yaml.safe_load(f)
-    global beat_dir
+    global beat_dir, target, name, data_num
+    data_num = cfg['data_num']
+    target = cfg['target']
+    name = cfg['name']
     beat_dir = cfg['data_dir'] + "/beat"
     os.makedirs(beat_dir, exist_ok=True)
 
+    print("-"*50)
     if cfg['mode'] == "regenerate":
         gen(cfg)
     if cfg['mode'] in ['regenerate', 'test']:
