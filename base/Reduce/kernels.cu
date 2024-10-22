@@ -74,6 +74,7 @@ change the r/w of shared mem to avoid bank conflict.
       ...
       ds_f[31]-bank[31]
       ds_f[32]-bank[ 0]
+      ...
     ~ each bank has a bandwidth of 32 bits/clock cycle
     ~ w/r the same bank in a warp raise bank conflict
 **************************************************
