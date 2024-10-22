@@ -11,8 +11,8 @@ Encoder::Encoder(std::string prefix, bool global_feat, bool feature_transform, s
     this->conv1 = new Conv1d(this->prefix + "conv1.", channel, 64, 1);
     this->conv2 = new Conv1d(this->prefix + "conv2.", 64, 128, 1);
     this->conv3 = new Conv1d(this->prefix + "conv3.", 128, 1024, 1);
-    this->bn1 = new BatchNorm1d(this->prefix + "bn1.", 64);
-    this->bn2 = new BatchNorm1d(this->prefix + "bn2.", 128);
+    this->bn1 = new BatchNorm1d(this->prefix + "bn1.", 64, true);
+    this->bn2 = new BatchNorm1d(this->prefix + "bn2.", 128, true);
     this->bn3 = new BatchNorm1d(this->prefix + "bn3.", 1024);
     this->relu = new ReLU(this->prefix + "relu.");
 
@@ -48,17 +48,15 @@ void Encoder::load_weights() {
 Tensor* Encoder::forward(Tensor* data) {
     DimVector shape = data->getShape();
     size_t bz = shape[0], D = shape[1], N = shape[2];
-
     Tensor* trans = stn->forward(data);
-
     data->transpose(2, 1);
     assert(D == 3);
 
-
     Tensor* x = data->bmm(trans);   // (N L C) @ (N C C)
     x->transpose(2, 1);
-    // x = bn1->forward(conv1->forward(x));
-    x = relu->forward(bn1->forward(conv1->forward(x)));
+    x = bn1->forward(conv1->forward(x));
+    // printShape(x->getShape());
+    // return x;
 
     Tensor* trans_feat;
 
@@ -70,7 +68,7 @@ Tensor* Encoder::forward(Tensor* data) {
         x->transpose(2, 1);
     }
 
-    x = relu->forward(bn2->forward(conv2->forward(x)));
+    x = bn2->forward(conv2->forward(x));
     x = bn3->forward(conv3->forward(x));
     x->max_(2, false);
 

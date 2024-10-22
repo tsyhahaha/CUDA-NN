@@ -4,7 +4,7 @@
 /* [(N x C) - (C)] / sqrt(C + eps) * (C) + (C) */
 __global__ 
 void kBn1d_l2(float* d_data, float* d_out, float* weights, float* bias, 
-    float* mean, float* var, float eps, int N, int C
+    float* mean, float* var, float eps, int N, int C, bool relu
 ) {
     int row = threadIdx.y + blockIdx.y * blockDim.y;
     int col = threadIdx.x + blockIdx.x * blockDim.x;
@@ -14,14 +14,15 @@ void kBn1d_l2(float* d_data, float* d_out, float* weights, float* bias,
     float scaling = rsqrtf(var[col] + eps); // 1 / sqrt(C + eps)
     float norm = (d_data[row * C + col] - mean[col]) * scaling;
 
-    d_out[row * C + col] = norm * weights[col] + bias[col];
+    float cVal = norm * weights[col] + bias[col];
+    d_out[row * C + col] = relu ? fmaxf(cVal, 0.0) : cVal;
 }
 
 
 /* [(N x C x L) - (C)] / sqrt(C + eps) * (C) + (C) */
 __global__ 
 void kBn1d_l3(float* d_data, float* d_out, float* weights, float* bias, 
-    float* mean, float* var, float eps, int N, int C, int L
+    float* mean, float* var, float eps, int N, int C, int L, bool relu
 ) {
     int z = threadIdx.z + blockIdx.z * blockDim.z;
     int y = threadIdx.y + blockIdx.y * blockDim.y;
@@ -32,7 +33,8 @@ void kBn1d_l3(float* d_data, float* d_out, float* weights, float* bias,
     float scaling = rsqrtf(var[y] + eps); // 1 / sqrt(C + eps)
     float norm = (d_data[z*C*L + y*L + x] - mean[y]) * scaling;
 
-    d_out[z*C*L + y*L + x] = norm * weights[y] + bias[y];
+    float cVal = norm * weights[y] + bias[y];
+    d_out[z*C*L + y*L + x] = relu ? fmaxf(cVal, 0.0) : cVal;
 }
 
 void BatchNorm1d::load_weights() {
@@ -62,8 +64,9 @@ void BatchNorm1d::load_weights(std::vector<float>& params, const std::string& ta
     }
 }
 
-BatchNorm1d::BatchNorm1d(std::string prefix, size_t num_features, float eps, float monmentum, bool affine, bool track_running_stats) {
+BatchNorm1d::BatchNorm1d(std::string prefix, size_t num_features, bool relu, float eps, float monmentum, bool affine, bool track_running_stats) {
     this->num_features = num_features;
+    this->relu = relu;
     this->eps = eps;
     this->momentum = monmentum;
     this->affine = affine;
@@ -90,8 +93,9 @@ BatchNorm1d::BatchNorm1d(std::string prefix, size_t num_features, float eps, flo
     }
 }
 
-BatchNorm1d::BatchNorm1d(size_t num_features, float eps, float monmentum, bool affine, bool track_running_stats) {
+BatchNorm1d::BatchNorm1d(size_t num_features, bool relu, float eps, float monmentum, bool affine, bool track_running_stats) {
     this->num_features = num_features;
+    this->relu = relu;
     this->eps = eps;
     this->momentum = monmentum;
     this->affine = affine;
@@ -139,16 +143,16 @@ Tensor* BatchNorm1d::forward(Tensor* data) {
         dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
         dim3 grid((C-1)/BLOCK_SIZE2D + 1, (N-1)/BLOCK_SIZE2D+1); 
 
-        kBn1d_l2<<<grid, block>>>(data->getData(), output->getData(), weights->getData(), bias->getData(), running_mean->getData(), running_var->getData(), eps, N, C); CHECK_KERNEL();
+        kBn1d_l2<<<grid, block>>>(data->getData(), output->getData(), weights->getData(), bias->getData(), running_mean->getData(), running_var->getData(), eps, N, C, this->relu); CHECK_KERNEL();
     } else if(dim == 3) {
         DimVector shape = data->getShape();
         int N = shape[0], C = shape[1], L = shape[2];
         this->output = new Tensor(shape);
 
-        dim3 block(BLOCK_SIZE3D, BLOCK_SIZE3D, BLOCK_SIZE3D);
-        dim3 grid((L-1)/BLOCK_SIZE3D + 1, (C-1)/BLOCK_SIZE3D+1, (N-1)/BLOCK_SIZE3D+1); 
+        dim3 block(BLOCK_SIZE3D, BLOCK_SIZE3D, BATCH_BASE);
+        dim3 grid((L-1)/BLOCK_SIZE3D + 1, (C-1)/BLOCK_SIZE3D+1, (N-1)/BATCH_BASE+1); 
 
-        kBn1d_l3<<<grid, block>>>(data->getData(), this->output->getData(), weights->getData(), bias->getData(), running_mean->getData(), running_var->getData(), eps, N, C, L); CHECK_KERNEL();
+        kBn1d_l3<<<grid, block>>>(data->getData(), this->output->getData(), weights->getData(), bias->getData(), running_mean->getData(), running_var->getData(), eps, N, C, L, this->relu); CHECK_KERNEL();
     } else {
         ERROR("Dimension not allowed!");
     }

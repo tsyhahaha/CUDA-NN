@@ -266,22 +266,20 @@ void test_module(
     float count_sum = 0.0;
     int i=0;
     for(std::string test_file: test_points) {
-        if(i>=data_num) break; i++;
         if(test_file.find("shape") == std::string::npos) {
+            if(i>=data_num) break; i++;
             std::string base_name = getBaseName(test_file);
-
             test_file = test_dir + "/" + base_name;
             DEBUG_PRINT("[TESTING] %s\n", test_file.c_str());
-
             std::vector<float> data_vec = read_param(test_file + ".txt");
             std::vector<size_t> shape = read_shape(test_file + ".shape.txt");
-
             Tensor* input = new Tensor(data_vec.data(), shape);
             auto start = std::chrono::high_resolution_clock::now();
-            Tensor* output = nn->forward(input);
+            //////////////////////////////////////
+            Tensor* output = nn->forward(input);//
+            //////////////////////////////////////
             auto end = std::chrono::high_resolution_clock::now();
-            
-            if (target == "model" && name == "pointnet") {
+            if (target == "model" && name == "pointnet" && cfg["argmax"] == "true") {
                 output = output->argmax(-1, false);
             }
             // log time
@@ -295,8 +293,8 @@ void test_module(
         }
     }
 
-    DEBUG_PRINT("Average time consumed: %.4f s\n", count_sum / test_points.size());
-    
+    DEBUG_PRINT("Average time consumed: %.4f s\n", count_sum / i);
+
     cudaDeviceSynchronize();
 }
 
@@ -351,7 +349,7 @@ void test_op(
 /* support to test single layer with its pretrained weights */
 int main(int argc, char *argv[]) {
 
-    std::string filename = "/home/course/taosiyuan241/CUDA-NN/config.yaml";
+    std::string filename = "/home/tsyhahaha/CUDA-NN/config.yaml";
     
     // Parse the yaml configuration
     std::pair<ConfigMap, LayerParams> config = loadYamlConfig(filename);

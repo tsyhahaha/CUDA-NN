@@ -12,11 +12,11 @@ STN3d::STN3d(std::string prefix, size_t channel) {
     this->fc3 = new Linear(this->prefix + "fc3.", 256, 9);
     this->relu = new ReLU(this->prefix + "relu.");
 
-    this->bn1 = new BatchNorm1d(this->prefix + "bn1.", 64);
-    this->bn2 = new BatchNorm1d(this->prefix + "bn2.", 128);
-    this->bn3 = new BatchNorm1d(this->prefix + "bn3.", 1024);
-    this->bn4 = new BatchNorm1d(this->prefix + "bn4.", 512);
-    this->bn5 = new BatchNorm1d(this->prefix + "bn5.", 256);
+    this->bn1 = new BatchNorm1d(this->prefix + "bn1.", 64, true);
+    this->bn2 = new BatchNorm1d(this->prefix + "bn2.", 128, true);
+    this->bn3 = new BatchNorm1d(this->prefix + "bn3.", 1024, true);
+    this->bn4 = new BatchNorm1d(this->prefix + "bn4.", 512, true);
+    this->bn5 = new BatchNorm1d(this->prefix + "bn5.", 256, true);
 }
 
 STN3d::~STN3d() {
@@ -41,13 +41,13 @@ void STN3d::load_weights() {
 
 Tensor* STN3d::forward(Tensor* data) {
     size_t bz = data->getShape()[0];
-    Tensor* x = relu->forward(bn1->forward(conv1->forward(data)));
-    x = relu->forward(bn2->forward(conv2->forward(x)));
-    x = relu->forward(bn3->forward(conv3->forward(x)));
+    Tensor* x = bn1->forward(conv1->forward(data));
+    x = bn2->forward(conv2->forward(x));
+    x = bn3->forward(conv3->forward(x));
     x->max_(2, false);
 
-    x = relu->forward(bn4->forward(fc1->forward(x)));
-    x = relu->forward(bn5->forward(fc2->forward(x)));
+    x = bn4->forward(fc1->forward(x));
+    x = bn5->forward(fc2->forward(x));
     x = fc3->forward(x);
 
     Tensor* iden = new Tensor({3,3}, IDENTITY);

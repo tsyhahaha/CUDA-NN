@@ -37,8 +37,8 @@ PointNet::PointNet(size_t k, bool normal_channel) {
     this->fc2 = new Linear(this->prefix + "fc2.", 512, 256);
     this->fc3 = new Linear(this->prefix + "fc3.", 256, k);
     this->dropout = new Dropout(this->prefix + "dropout.", 0.4);
-    this->bn1 = new BatchNorm1d(this->prefix + "bn1.", 512);
-    this->bn2 = new BatchNorm1d(this->prefix + "bn2.", 256);
+    this->bn1 = new BatchNorm1d(this->prefix + "bn1.", 512, true);
+    this->bn2 = new BatchNorm1d(this->prefix + "bn2.", 256, true);
     this->softmax = new SoftMax(this->prefix + "softmax.", 1);
     this->relu = new ReLU(this->prefix + "relu.");
 }
@@ -54,10 +54,9 @@ void PointNet::load_weights() {
 
 Tensor* PointNet::forward(Tensor* data) {
     Tensor* x = feat->forward(data);
-    x = relu->forward(bn1->forward(fc1->forward(x)));
+    x = bn1->forward(fc1->forward(x));
 
-    // x = F.relu(self.bn2(self.dropout(self.fc2(x))))
-    x = relu->forward(bn2->forward(fc2->forward(x)));
+    x = bn2->forward(fc2->forward(x));
     x = fc3->forward(x);     // (B x num_classes)
     // x = softmax->forward(x);
 

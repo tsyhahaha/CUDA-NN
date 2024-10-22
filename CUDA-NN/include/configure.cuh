@@ -5,8 +5,13 @@
 #define BLOCK_SIZE1D 256
 #define BLOCK_SIZE2D 16
 // less than the minimum value of the column and column of the matrix involved in the calculation
-#define TILE_SIZE 16
-#define BLOCK_SIZE3D 4  
+#define TILE_SIZE 8
+#define BLOCK_SIZE3D 16
+
+#define BATCH_BASE 2
+
+#define TM 8
+#define TN 8
 
 #include<vector>
 #include<string>

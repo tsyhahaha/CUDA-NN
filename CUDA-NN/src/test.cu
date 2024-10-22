@@ -10,13 +10,14 @@
 #include <map>
 #include <dirent.h>
 #include <cstring>
-#include <hdf5/serial/H5Cpp.h>
+#include <H5Cpp.h>
 
 #include "configure.cuh"
 #include "layers.cuh"
 #include "models.cuh"
 #include "tensor.cuh"
 #include "utils.cuh"
+#include "datasets/dataloader.cuh"
 
 /****************************************************************************************
  * 读取模型参数
@@ -153,39 +154,49 @@ int main(int argc, char *argv[]) {
     PointNet* pointnet = new PointNet();
     pointnet->load_weights();
 
-    std::string file_path = "/home/course/test_point_clouds.h5";
+    std::string file_path = "/home/tsyhahaha/CUDA-NN/data/splits/test_point_clouds.h5";
     std::vector<std::vector<float>> list_of_points;
     std::vector<int> list_of_labels;
     // 读取训练集数据
     read_h5_file(file_path, list_of_points, list_of_labels);
 
+    DataLoader* dataloader = new DataLoader(list_of_points, list_of_labels, 8, 10000);
+
     // 开始计时，使用chrono计时，不支持其它计时方式
     auto start = std::chrono::high_resolution_clock::now();
 
     unsigned int right_num = 0;
+    unsigned int data_sum = list_of_points.size();
+    unsigned int batch_num = dataloader->getBatchNum();
     
-    for (size_t i = 0; i < list_of_points.size(); i++) {
-        size_t n_data = list_of_points[i].size() / 3;
-        Tensor* input = new Tensor({3, n_data});
-        input->unsqueeze(0);
-        input->fromVec(list_of_points[i]);
+    for (size_t i = 0; i < 1; i++) {
+        std::vector<int> labels;
+
+        Tensor* input = dataloader->getBatchedData(labels);
+        input->transpose(-2, -1);
         Tensor* output = pointnet->forward(input);
         Tensor* pred = output->argmax(-1);
         pred->squeeze();
 
-        float* pred_label = pred->toHost();
+        float* pred_labels = pred->toHost();
 
-        if(int(pred_label[0]+0.5) == list_of_labels[i]) {
-            right_num++;
+        printM(pred_labels, pred->getShape());
+        for(int label: labels) {
+            printf("%d ", label);
         }
+        printf("\n");
+        // clean up
+        delete input, output, pred;
 
     
-        std::cout << "Points " << i << ": ";
-        printf("%d", int(pred_label[0]+0.5));
-        // for (const auto& point : list_of_points[i]) {
-        //     std::cout << point << " ";
-        // }
-        std::cout << "\tLabel: " << list_of_labels[i] << std::endl;
+        // std::cout << "[" << i+1 << "/" << data_sum << "] Points " << i << ", size=" << n_data << ": ";
+        // printf("%d", int(pred_label[0]+0.5));
+        // // for (const auto& point : list_of_points[i]) {
+        // //     std::cout << point << " ";
+        // // }
+        // std::cout << "\tLabel: " << list_of_labels[i] << std::endl;
+
+        printf("Batch[%d/%d] ", (int)i+1, (int)batch_num);
 
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = end - start;

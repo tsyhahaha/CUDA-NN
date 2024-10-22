@@ -62,11 +62,11 @@ Tensor* ReLU::forward(Tensor* data) {
     int grid = (n_data - 1) / block + 1;
 
     if (inplace) {
-        kReLU1D<<<grid, block>>>(data->getData(), data->getData(), n_data);
+        kReLU1D<<<grid, block>>>(data->getData(), data->getData(), n_data); CHECK_KERNEL();
         this->output = data;
     } else {
         Tensor* tensor_o = new Tensor(shape_o);
-        kReLU1D<<<grid, block>>>(data->getData(), tensor_o->getData(), n_data);
+        kReLU1D<<<grid, block>>>(data->getData(), tensor_o->getData(), n_data);CHECK_KERNEL();
         this->output = tensor_o;
     }
 

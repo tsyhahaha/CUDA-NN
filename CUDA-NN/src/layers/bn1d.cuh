@@ -18,6 +18,7 @@ class BatchNorm1d: public BaseLayer {
         float momentum; // x^_new = (1-momentum)*x^ + monmentum*x_t (ob)
         bool affine;    // alpha, beta
         bool track_running_stats;
+        bool relu;
         
         
         Tensor* running_mean;   // the mean per channel(C)
@@ -30,8 +31,8 @@ class BatchNorm1d: public BaseLayer {
         // Tensor* outputBackward=nullptr;
 
     public:
-        BatchNorm1d(std::string prefix, size_t num_features, float eps = 1e-5, float monmentum=0.1, bool affine=true, bool track_running_stats=true);
-        BatchNorm1d(size_t num_features, float eps = 1e-5, float monmentum=0.1, bool affine=true, bool track_running_stats=true);
+        BatchNorm1d(std::string prefix, size_t num_features, bool relu=false, float eps = 1e-5, float monmentum=0.1, bool affine=true, bool track_running_stats=true);
+        BatchNorm1d(size_t num_features, bool relu=false, float eps = 1e-5, float monmentum=0.1, bool affine=true, bool track_running_stats=true);
         ~BatchNorm1d();
 
         void load_weights(std::vector<float>& params, const std::string& target);
