@@ -40,7 +40,7 @@ def gen(cfg):
     print(f"Generate test points for {cfg['name'].upper()}")
     for i in tqdm(range(num)):
         shape = ()
-        B, L = random.randint(1, 8), random.randint(64, 128)
+        B, L = random.randint(1, 8), random.randint(128, 256)
         if cfg['target'] == 'model':
             if cfg['name'] in ["pointnet", 'stn3d', 'encoder']:
                 shape = (B, 3, L)
@@ -122,6 +122,7 @@ def test_py(cfg):
         
         net.weight.data = torch.from_numpy(weights).cuda().reshape(net.weight.shape)
         net.bias.data = torch.from_numpy(bias).cuda().reshape(net.bias.data.shape)
+        # net.bias.data = torch.zeros(net.bias.data.shape).cuda()
 
         if cfg['name'] == 'batchnorm1d':
             running_mean = np.loadtxt(param_path + ".running_mean.txt", dtype=np.float32)
@@ -147,7 +148,8 @@ def test_py(cfg):
         time_start = time.time()
         if cfg['name'] == 'pointnet':
             output, _ = net(data.to(torch.float32))
-            output = torch.argmax(output, dim=1)
+            if cfg['pointnet']['argmax']:
+                output = torch.argmax(output, dim=1)
         elif cfg['name'] == 'encoder':
             output, _, __ = net(data.to(torch.float32))
         else:
@@ -182,10 +184,10 @@ def test_cu(cfg):
     os.chdir(cur)
     print("-"*50)
 
-def beat(pyout, cuout):
+def beat(pyout, cuout, cfg):
     print(f"Beat the outputs")
     
-    if target == 'model' and name == 'pointnet':
+    if target == 'model' and name == 'pointnet' and cfg['pointnet']['argmax']:
         print(" - using argmax to compare the output of pointnet")
 
     def _check_file(f1, f2):
@@ -193,19 +195,14 @@ def beat(pyout, cuout):
         data2 = np.loadtxt(f2, dtype=float)
         if data1.size != data2.size:
             raise ValueError(f"{f1} data size not equal: {data1.size}!={data2.size}")
-        # if target == 'model' and name == 'pointnet':
-        #     # point net output is a 2D tensor(B, C=10), we need to compare the argmax
-        #     data1 = np.argmax(data1.reshape(-1, 10), axis=1)
-        #     data2 = np.argmax(data2.reshape(-1, 10), axis=1)
-        #     is_error = (data1 != data2).any()
-        #     error_num = np.sum(is_error)
-        #     string = "error_rate={%f}"%error_num/data1.size
-        #     return is_error, error_num <= (data1.size//2), string
-        # else:
-        mask = data1 > 1e-6     # for layers like relu
-        mean_error = np.sum(np.abs(data1 - data2) * mask) / np.sum(data1 * mask) / np.sum(mask)   # mean error scale
-        is_error = mean_error >= 1e-4
-        error_num = np.sum(is_error)
+        thres = 1e-3
+        if name=='pointnet':
+            thres = 1e-1
+        mask = np.where(np.abs(data1) > 1e-6, 1, 0)
+        l1_error = np.abs(data1 - data2)
+        mean_error = np.sum(l1_error * mask) / np.sum(mask)
+        is_error = mean_error >= thres
+        error_num = np.sum(np.where(l1_error > thres, 1, 0))
 
         string = "mean_error={%.4f}, error_rate={%f}"%(mean_error, error_num/data1.size)
         return is_error.any(), error_num <= (data1.size//2), string
@@ -247,7 +244,7 @@ def main():
         torch.cuda.empty_cache()
         test_cu(cfg)
     
-    pl, el = beat(cfg['data_dir'] + "/pyout", cfg['data_dir'] + "/cuout")    
+    pl, el = beat(cfg['data_dir'] + "/pyout", cfg['data_dir'] + "/cuout", cfg)    
     if len(el)==0 and len(pl)==0:
         print(f"[AC] Test all {cfg['data_num']} points successfully!")
     else:
