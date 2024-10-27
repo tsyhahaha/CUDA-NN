@@ -45,9 +45,9 @@ Tensor* STNkd::forward(Tensor* data) {
     Tensor* x = bn1->forward(conv1->forward(data));
     x = bn2->forward(conv2->forward(x));
     x = bn3->forward(conv3->forward(x));
-    x->max_(2, false);
+    Tensor* max_x = x->max(2, false);
 
-    x = bn4->forward(fc1->forward(x));
+    x = bn4->forward(fc1->forward(max_x));
     x = bn5->forward(fc2->forward(x));
     x = fc3->forward(x);
 
@@ -58,7 +58,7 @@ Tensor* STNkd::forward(Tensor* data) {
     o->reshape({bz, this->k, this->k});
 
     // clean up
-    // delete x, iden;
+    delete iden;
 
     return o;
 }

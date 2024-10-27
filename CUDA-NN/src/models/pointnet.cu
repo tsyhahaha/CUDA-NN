@@ -19,7 +19,7 @@ PointNet::PointNet(std::string prefix, size_t k, bool normal_channel) {
     this->dropout = new Dropout(this->prefix + "dropout.", 0.4);
     this->bn1 = new BatchNorm1d(this->prefix + "bn1.", 512);
     this->bn2 = new BatchNorm1d(this->prefix + "bn2.", 256);
-    this->softmax = new SoftMax(this->prefix + "softmax.", 1);
+    this->softmax = new SoftMax(this->prefix + "softmax.", 1, true);
     this->relu = new ReLU(this->prefix + "relu.");
 }
 
@@ -39,7 +39,7 @@ PointNet::PointNet(size_t k, bool normal_channel) {
     this->dropout = new Dropout(this->prefix + "dropout.", 0.4);
     this->bn1 = new BatchNorm1d(this->prefix + "bn1.", 512, true);
     this->bn2 = new BatchNorm1d(this->prefix + "bn2.", 256, true);
-    this->softmax = new SoftMax(this->prefix + "softmax.", 1);
+    this->softmax = new SoftMax(this->prefix + "softmax.", 1, true);
     this->relu = new ReLU(this->prefix + "relu.");
 }
 
@@ -55,11 +55,9 @@ void PointNet::load_weights() {
 Tensor* PointNet::forward(Tensor* data) {
     Tensor* x = feat->forward(data);
     x = bn1->forward(fc1->forward(x));
-
     x = bn2->forward(fc2->forward(x));
     x = fc3->forward(x);     // (B x num_classes)
-    // x = softmax->forward(x);
-
+    x = softmax->forward(x);
     return x;
 }
 

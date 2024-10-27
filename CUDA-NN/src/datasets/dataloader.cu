@@ -10,18 +10,26 @@ void freePinnedMemory(float* ptr) {
     cudaFreeHost(ptr);
 }
 
-DataLoader::DataLoader(std::vector<std::vector<float>>& data, std::vector<int>& labels, size_t batchsize, size_t cropping_size, size_t channel, size_t num_workers, bool pin_memory, bool drop_last) {
+DataLoader::DataLoader(std::vector<std::vector<float>>& data, std::vector<int>& labels, size_t batchsize, size_t cropping_size, bool shuffle, size_t num_workers, bool pin_memory, bool drop_last) {
     this->batchsize = batchsize;
     this->num_workers = num_workers;
     this->pin_memory = pin_memory;
     this->drop_last = drop_last;
+    this->shuffle = shuffle;
 
     this->idx = 0;
     this->cropping_size = cropping_size; // cropping length, default: 21950
-    this->channel = channel;
+    // this->channel = channel;
 
     this->data = data;
     this->labels = labels;
+
+    if(shuffle) {
+        std::random_device rd;
+        std::mt19937 g(rd());
+
+        std::shuffle(data.begin(), data.end(), g);
+    }
 }
 
 std::vector<float> DataLoader::crop(std::vector<float>& points) {

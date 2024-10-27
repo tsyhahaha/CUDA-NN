@@ -79,7 +79,7 @@ void kArgmaxLastDim2D(float* d_data, float* d_out, size_t C, size_t L
 
     __shared__ float sd_M[BLOCK_SIZE1D];
     __shared__ unsigned int sd_idx[BLOCK_SIZE1D];
-    float cur_max = 0.0f;
+    float cur_max = -1e6f;
     unsigned int cur_idx = 0;
     bool ge = 0;
 
@@ -89,14 +89,14 @@ void kArgmaxLastDim2D(float* d_data, float* d_out, size_t C, size_t L
             sd_M[tid] = d_data[x*L + i*BLOCK_SIZE1D + tid];
             sd_idx[tid] = i*BLOCK_SIZE1D + tid;
         } else {
-            sd_M[tid] = 0.0f;
+            sd_M[tid] = -1e6f;
             sd_idx[tid] = 0;
         }
         __syncthreads();
 
         // reduce max and save to `cur_max`
         for(int stride=blockDim.x/2; stride>0; stride>>=1) {
-            if(tid < stride) {
+            if(tid < stride && i*BLOCK_SIZE1D + tid + stride < L) {
                 ge = sd_M[tid] > sd_M[tid + stride];
                 sd_M[tid] = ge ? sd_M[tid] : sd_M[tid+stride];
                 sd_idx[tid] = ge ? sd_idx[tid] : sd_idx[tid+stride];

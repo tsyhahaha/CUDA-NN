@@ -48,15 +48,15 @@ void Encoder::load_weights() {
 Tensor* Encoder::forward(Tensor* data) {
     DimVector shape = data->getShape();
     size_t bz = shape[0], D = shape[1], N = shape[2];
+
     Tensor* trans = stn->forward(data);
     data->transpose(2, 1);
     assert(D == 3);
 
     Tensor* x = data->bmm(trans);   // (N L C) @ (N C C)
+    
     x->transpose(2, 1);
     x = bn1->forward(conv1->forward(x));
-    // printShape(x->getShape());
-    // return x;
 
     Tensor* trans_feat;
 
@@ -70,7 +70,7 @@ Tensor* Encoder::forward(Tensor* data) {
 
     x = bn2->forward(conv2->forward(x));
     x = bn3->forward(conv3->forward(x));
-    x->max_(2, false);
+    Tensor* max_x = x->max(2, false);
 
     /*
     if self.global_feat:
@@ -78,13 +78,13 @@ Tensor* Encoder::forward(Tensor* data) {
     */
 
     // clean up
-    // delete trans;
-    // if(this->feature_transform) {
-    //     delete trans_feat;
-    // }
+    delete trans;
+    if(this->feature_transform) {
+        delete trans_feat;
+    }
 
     if(this->global_feat) {
-        return x;
+        return max_x;
     }
     ERROR("Not implemented!\n");
     return nullptr;    

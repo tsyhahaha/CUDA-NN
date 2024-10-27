@@ -364,10 +364,13 @@ Tensor* Tensor::argmax(int dim, bool keepDim) {
             tensor_o->shape[dim] = 1;
             if(!keepDim)
                 this->squeeze(-1);
+                
             return tensor_o;
         } else {
-            ERROR("Not implementated!\n");
+            ERROR("Not implementated: size=%d dim=%d\n", size, dim);
         }
+    } else {
+        ERROR("size=%d<dim=%d\n", size, dim);
     }
     return tensor_o;
 }
@@ -402,7 +405,6 @@ Tensor* Tensor::max(int dim, bool keepDim){
         dim = size + dim;
     }
 
-    printShape(this->shape);
     DimVector shape_o = this->shape;
     Tensor* tensor_o = new Tensor(shape_o);
 
@@ -416,7 +418,7 @@ Tensor* Tensor::max(int dim, bool keepDim){
             tensor_o->n_data /= shape[dim];
             tensor_o->shape[dim] = 1;
             if(!keepDim)
-                this->squeeze(-1);
+                tensor_o->squeeze(-1);
             return tensor_o;
         } else if(size == 2 && dim==size-1) {
             size_t C=this->shape[0], L=this->shape[1];
@@ -428,7 +430,7 @@ Tensor* Tensor::max(int dim, bool keepDim){
             tensor_o->n_data /= shape[dim];
             tensor_o->shape[dim] = 1;
             if(!keepDim)
-                this->squeeze(-1);
+                tensor_o->squeeze(-1);
             return tensor_o;
         } else {
             ERROR("Not implementated!\n");

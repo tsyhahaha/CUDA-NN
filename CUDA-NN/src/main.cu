@@ -276,14 +276,17 @@ void test_module(
             Tensor* input = new Tensor(data_vec.data(), shape);
             auto start = std::chrono::high_resolution_clock::now();
             //////////////////////////////////////
+            // forward process                  //
             Tensor* output = nn->forward(input);//
             //////////////////////////////////////
-            auto end = std::chrono::high_resolution_clock::now();
+            auto end = std::chrono::high_resolution_clock::now();std::vector<float> output_vec;
             if (target == "model" && name == "pointnet" && cfg["argmax"] == "true") {
-                output = output->argmax(-1, false);
+                Tensor* argmax_res = output->argmax(-1, false);
+                output_vec = argmax_res->toVec();
+            } else {
+                output_vec = output->toVec();
             }
             // log time
-            std::vector<float> output_vec = output->toVec();
             std::chrono::duration<double> diff = end - start;
             count_sum += diff.count();
             DEBUG_PRINT("Single-point inference time consumed: %.4f\n", diff.count());
@@ -313,8 +316,8 @@ void test_op(
     auto start = std::chrono::high_resolution_clock::now();
     int i=0; float count_sum = 0.0;
     for(std::string test_file: test_points) {
-        if(i>=data_num) break; i++;
         if(test_file.find("shape") == std::string::npos) {
+            if(i>=data_num) break; i++;
             std::string base_name = getBaseName(test_file);
             test_file = test_dir + "/" + base_name;
             DEBUG_PRINT("[TESTING] %s\n", test_file.c_str());
@@ -324,8 +327,12 @@ void test_op(
             std::vector<float> output_vec;
             auto start = std::chrono::high_resolution_clock::now();
             if(name == "max") {
-                input->max_(2, false);
+                input->max_(-1, false);
                 output_vec = input->toVec();
+            } else if(name == "argmax") {
+                Tensor* output = input->argmax(-1, false);
+                output_vec = output->toVec();
+                delete output;
             } else {
                 ERROR("Not implemented op %s!\n", name.c_str());
             }

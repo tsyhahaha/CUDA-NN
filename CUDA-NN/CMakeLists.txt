@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0)
-project(CUDA-NN LANGUAGES CUDA)
+project(CUDA-NN LANGUAGES CXX CUDA)
 
 aux_source_directory(src SRC)
 

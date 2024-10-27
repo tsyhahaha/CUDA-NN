@@ -160,7 +160,7 @@ int main(int argc, char *argv[]) {
     // 读取训练集数据
     read_h5_file(file_path, list_of_points, list_of_labels);
 
-    DataLoader* dataloader = new DataLoader(list_of_points, list_of_labels, 8, 10000);
+    DataLoader* dataloader = new DataLoader(list_of_points, list_of_labels, 8, 10240, true);
 
     // 开始计时，使用chrono计时，不支持其它计时方式
     auto start = std::chrono::high_resolution_clock::now();
