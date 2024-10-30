@@ -45,32 +45,33 @@ void Encoder::load_weights() {
     }
 }
 
-Tensor* Encoder::forward(Tensor* data) {
+Tensor* Encoder::forward(Tensor* data, Tensor* mask) {
     DimVector shape = data->getShape();
     size_t bz = shape[0], D = shape[1], N = shape[2];
 
-    Tensor* trans = stn->forward(data);
+    Tensor* trans = stn->forward(data, mask);
     data->transpose(2, 1);
     assert(D == 3);
 
-    Tensor* x = data->bmm(trans);   // (N L C) @ (N C C)
+    Tensor* o = data->bmm(trans);   // (N L C) @ (N C C)
     
-    x->transpose(2, 1);
-    x = bn1->forward(conv1->forward(x));
+    o->transpose(2, 1);
+    Tensor* x = bn1->forward(conv1->forward(o));
 
     Tensor* trans_feat;
+    Tensor* f_trans;
 
     if(this->feature_transform) {
-        trans_feat = fstn->forward(x);
+        trans_feat = fstn->forward(x, mask);
         x->transpose(2, 1);
-        Tensor* f_trans = x->bmm(trans_feat);    // track f_trans
+        f_trans = x->bmm(trans_feat);    // track f_trans
         x = f_trans;
         x->transpose(2, 1);
     }
 
     x = bn2->forward(conv2->forward(x));
-    x = bn3->forward(conv3->forward(x));
-    Tensor* max_x = x->max(2, false);
+    x = bn3->forward(conv3->forward(x));    // the output has been changed, attention when impl training
+    x->max_(2, false);
 
     /*
     if self.global_feat:
@@ -78,13 +79,14 @@ Tensor* Encoder::forward(Tensor* data) {
     */
 
     // clean up
-    delete trans;
-    if(this->feature_transform) {
+    delete o, trans;
+    if(this->global_feat) {
         delete trans_feat;
+        delete f_trans;
     }
 
     if(this->global_feat) {
-        return max_x;
+        return x;
     }
     ERROR("Not implemented!\n");
     return nullptr;    

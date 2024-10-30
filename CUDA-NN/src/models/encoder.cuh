@@ -1,13 +1,13 @@
 #ifndef ENCODER_H
 #define ENCODER_H
 
-// #include "module.cuh"
+#include "base.cuh"
 #include "tensor.cuh"
 #include "layers.cuh"
 #include "stn3d.cuh"
 #include "stnkd.cuh"
 
-class Encoder: public Module {
+class Encoder: public BaseModel {
     private:
         bool global_feat;
         bool feature_transform;
@@ -29,7 +29,7 @@ class Encoder: public Module {
 
         void load_weights();
 
-        Tensor* forward(Tensor* data);
+        Tensor* forward(Tensor* data, Tensor* mask = nullptr);
         Tensor* backward(Tensor* gradients);
 };
 

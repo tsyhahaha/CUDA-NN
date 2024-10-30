@@ -1,9 +1,6 @@
-#include "tensor.cuh"
 #include "conv1d.cuh"
 
-#define FETCH_FLOAT4(pointer) (reinterpret_cast<float4 *>(&(pointer))[0])
 #define PRINT_IDX() printf("block(%d,%d,%d) thread(%d,%d,%d) ", blockIdx.x, blockIdx.y, blockIdx.z, threadIdx.x, threadIdx.y, threadIdx.z)
-
 
 __global__
 void kConv1d(float* d_in, float* d_out, float* weights, float* bias, int C_in, int C_out, int L, int N) {
@@ -100,7 +97,7 @@ void kConv1d_v2(float* d_in, float* d_out, float* weights, float* bias, int C_in
     int col = (blockIdx.x * blockDim.x + threadIdx.x)*TN;
     int batch = blockIdx.z * blockDim.z + threadIdx.z;
 
-    if(batch >= N || row >= C_out || col >= L) return;
+    if(batch >= N) return;
 
     __shared__ float ds_A[BLOCK_SIZE3D * TM][TILE_SIZE];
     __shared__ float ds_B[BATCH_BASE][TILE_SIZE][BLOCK_SIZE3D * TN];
@@ -115,7 +112,7 @@ void kConv1d_v2(float* d_in, float* d_out, float* weights, float* bias, int C_in
     int phase = (C_in - 1) / TILE_SIZE + 1;
     for(int p=0; p<phase;p++) {
         for(int i=0; i<TM; i++) {
-            if(threadIdx.z == 0 &&  threadIdx.x < TILE_SIZE) {
+            if(threadIdx.z == 0 && threadIdx.x < TILE_SIZE) {
                 if(row+i < C_out && p*TILE_SIZE + threadIdx.x < C_in) {
                     ds_A[threadIdx.y*TM+i][threadIdx.x] = weights[(row+i) * C_in + p*TILE_SIZE + threadIdx.x];
                 } else {
@@ -123,7 +120,6 @@ void kConv1d_v2(float* d_in, float* d_out, float* weights, float* bias, int C_in
                 }
             }
         }
-        
 
         for(int j=0; j<TN; j++) {
             if(threadIdx.y < TILE_SIZE) {
@@ -135,26 +131,33 @@ void kConv1d_v2(float* d_in, float* d_out, float* weights, float* bias, int C_in
             }
         }
         __syncthreads();
+        
 
         for (int k=0; k<TILE_SIZE; k++) {
             for (int i=0; i<TM; i++) {
                 if(row + i < C_out) {
                     reg_A[i] = ds_A[threadIdx.y * TM + i][k];
+                } else {
+                    reg_A[i] = 0.0f;
                 }
             }
 
             for(int j=0; j<TN; j++) {
                 if(col + j < L) {
                     reg_B[j] = ds_B[threadIdx.z][k][threadIdx.x * TN + j];
+                } else {
+                    reg_B[j] = 0.0f;
                 }
             }
             __syncthreads();
 
             for(int j=0; j<TN; j++) {
                 for (int i=0; i<TM; i++) {
+                    // if(col + j < L && row + i < C_out)
                     tie[i][j] += reg_A[i] * reg_B[j];
                 }
             }
+            __syncthreads();
         }
     }
 
@@ -174,7 +177,7 @@ void kConv1d_v3(float* d_in, float* d_out, float* weights, float* bias, int C_in
     int col = (blockIdx.x * blockDim.x + threadIdx.x)*TN;
     int batch = blockIdx.z * blockDim.z + threadIdx.z;
 
-    if(row >= C_out || col >= L || batch >= N) return;
+    if(batch >= N) return;
 
     __shared__ float ds_w[TILE_SIZE][BLOCK_SIZE3D * TM];
     __shared__ float ds_in[BATCH_BASE][TILE_SIZE][BLOCK_SIZE3D * TN];
@@ -221,8 +224,6 @@ void kConv1d_v3(float* d_in, float* d_out, float* weights, float* bias, int C_in
                     ds_in[threadIdx.z][threadIdx.y][threadIdx.x*TN + j*4 + 1] = 0.0f;
                     ds_in[threadIdx.z][threadIdx.y][threadIdx.x*TN + j*4 + 2] = 0.0f;
                     ds_in[threadIdx.z][threadIdx.y][threadIdx.x*TN + j*4 + 3] = 0.0f;
-
-                    // ds_B[threadIdx.y][threadIdx.x*TN + j] = 0.0f;
                 }
             }
         }
@@ -285,16 +286,15 @@ Conv1d::Conv1d(std::string prefix, size_t in_channels, size_t out_channels, size
     }
 
     if(bias) {
-        this->bias = new Tensor({out_channels}, ZERO);
+        this->bias = new Tensor({out_channels}, this->is_training ? ZERO : NONE);
     } else 
         this->bias = nullptr;
 
-    this->weights = new Tensor({out_channels, in_channels}, RANDOM);
+    this->weights = new Tensor({out_channels, in_channels}, this->is_training ? RANDOM : NONE);
 }
 
 
 Conv1d::Conv1d(size_t in_channels, size_t out_channels, size_t kernel_size, bool bias) {
-    printf("in the constructor\n");
     this->in_channels = in_channels;
     this->out_channels = out_channels;
     this->kernel_size = this->kernel_size;
@@ -309,14 +309,6 @@ Conv1d::Conv1d(size_t in_channels, size_t out_channels, size_t kernel_size, bool
         this->bias = nullptr;
 
     this->weights = new Tensor({out_channels, in_channels}, RANDOM);
-}
-
-Conv1d::~Conv1d() {
-    delete weights;
-    delete bias;
-    delete input;
-    delete output;
-    delete outputBackward;
 }
 
 /*

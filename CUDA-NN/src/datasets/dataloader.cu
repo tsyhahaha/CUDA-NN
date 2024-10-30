@@ -39,43 +39,61 @@ std::vector<float> DataLoader::crop(std::vector<float>& points) {
     return cropped_points;
 }
 
+
 Tensor* DataLoader::getBatchedData(std::vector<int>& labels) {
     DimVector shape;
-    if(this->pin_memory) {
-        // TODO
+
+    if (this->pin_memory) {
+        // TODO: Implement pin_memory handling
         return nullptr;
     } else {
         std::vector<float> batch;
 
-        if(this->idx < data.size() && this->idx +batchsize >= data.size() && !drop_last) {
-            shape = {this->data.size() - this->idx, cropping_size, 3};
-            batch.reserve((this->data.size() - this->idx) * cropping_size * 3);
+        if (this->idx < data.size()) {
+            if (this->idx + batchsize > data.size() && !drop_last) {
+                shape = {this->data.size() - this->idx, cropping_size, 3};
+                batch.reserve((this->data.size() - this->idx) * cropping_size * 3);
 
-            for(; this->idx < this->data.size(); this->idx++) {
-                std::vector<float> point = crop(this->data[this->idx]);
-                batch.insert(batch.end(), point.begin(), point.end());
+                for (; this->idx < this->data.size(); this->idx++) {
+                    std::vector<float> point = batchsize > 1 ? crop(this->data[this->idx]) : this->data[this->idx];
+                        
+                    batch.insert(batch.end(), point.begin(), point.end());
+                }
+                labels.assign(this->labels.begin() + this->idx, this->labels.end());
+                this->idx = data.size();
+            } else {
+                if(batchsize > 1) {
+                    shape = {batchsize, cropping_size, 3};
+                    batch.reserve(batchsize * cropping_size * 3);
+                } else {
+                    shape = {1, this->data[this->idx].size()/3, 3};
+                    batch.reserve(this->data[this->idx].size());
+                }
+                if (this->idx + batchsize > this->labels.size()) {
+                    throw std::out_of_range("Index out of range for labels");
+                }
+                labels.assign(this->labels.begin() + this->idx, this->labels.begin() + this->idx + batchsize);
+
+                for (int i = 0; i < batchsize; i++) {
+                    if (this->idx >= this->data.size()) {
+                        throw std::out_of_range("Index out of range for data");
+                    }
+                    std::vector<float> point = batchsize > 1 ? crop(this->data[this->idx]) : this->data[this->idx];
+                    batch.insert(batch.end(), point.begin(), point.end());
+                    this->idx++;
+                }
             }
-            labels = std::vector<int>(this->labels.begin() + this->idx, this->labels.end());
         } else {
-            shape = {batchsize, cropping_size, 3};
-            batch.reserve(batchsize * cropping_size * 3);
-            for(int i = 0; i<batchsize; i++) {
-                std::vector<float> point = crop(this->data[this->idx]);
-                batch.insert(batch.end(), point.begin(), point.end());
-                this->idx++;
-            }
-            labels = std::vector<int>(this->labels.begin() + this->idx, this->labels.begin() + this->idx + batchsize);
+            throw std::runtime_error("No more data to load");
         }
 
         Tensor* batch_input = new Tensor(shape);
-
-
         batch_input->fromVec(batch);
-        printShape(batch_input->getShape());
 
         return batch_input;
     }
 }
+
 
 size_t DataLoader::getDataNum(){
     return (size_t)this->labels.size();

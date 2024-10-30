@@ -13,7 +13,7 @@ set(EXECUTABLE_OUTPUT_PATH ${EXEC_PATH})
 add_executable(main main.cu)
 
 add_executable(test1 test.cu)
-target_compile_options(test1 PRIVATE -Xcompiler -O3)
+target_compile_options(test1 PRIVATE -Xcompiler -O3 -lineinfo)
 
 set(HDF_HOME /usr/local/HDF_Group/HDF5/1.14.5)
 
@@ -35,7 +35,7 @@ add_custom_target(run
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
 
-set(PARAMS_DIR /home/tsyhahaha/best_model)
+set(PARAMS_DIR /home/tsyhahaha/default)
 add_custom_target(test
     COMMAND test1   ${PARAMS_DIR}
     DEPENDS test1

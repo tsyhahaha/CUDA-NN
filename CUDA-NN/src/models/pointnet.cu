@@ -52,8 +52,20 @@ void PointNet::load_weights() {
     this->bn2->load_weights();
 }
 
-Tensor* PointNet::forward(Tensor* data) {
-    Tensor* x = feat->forward(data);
+PointNet::~PointNet(){
+    delete feat;
+    delete fc1;
+    delete fc2;
+    delete fc3;
+    delete dropout;
+    delete bn1;
+    delete bn2;
+    delete softmax;
+    delete relu;
+}
+
+Tensor* PointNet::forward(Tensor* data, Tensor* mask) {
+    Tensor* x = feat->forward(data, mask);
     x = bn1->forward(fc1->forward(x));
     x = bn2->forward(fc2->forward(x));
     x = fc3->forward(x);     // (B x num_classes)

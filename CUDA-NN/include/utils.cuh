@@ -6,7 +6,7 @@
 #include<iostream>
 #include<vector>
 
-#define DEBUG 2
+#define DEBUG 0
 
 #if defined(DEBUG) && DEBUG >= 1
  #define DEBUG_PRINT(fmt, args...) fprintf(stderr, "[DEBUG] %s(%d):%s(): " fmt, __FILE__, __LINE__, __func__, ##args)
@@ -28,12 +28,16 @@ do                                                    \
 #define ERROR(fmt, args...) do { fprintf(stderr, "%s(%d):%s(): " fmt, __FILE__, __LINE__, __func__, ##args); exit(0);} while(0)
 
 
-#define CHECK_KERNEL() \
+#if defined(DEBUG) && DEBUG >= 1
+ #define CHECK_KERNEL() \
 do \
 {  \
     CHECK(cudaGetLastError());       \
     CHECK(cudaDeviceSynchronize());  \
 } while(0)
+#else
+ #define CHECK_KERNEL()
+#endif
 
 #define printShape(shape) \
 do { \

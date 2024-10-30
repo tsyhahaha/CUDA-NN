@@ -58,25 +58,13 @@ std::vector<float> read_param(const std::string& filepath) {
 }
 
 std::map<std::string, std::vector<float>> read_params(std::string dir) {
-    // std::string dir = "."; // 当前目录
     std::map<std::string, std::vector<float>> params;
 
-    // 获取目录中的所有 .txt 文件
     std::vector<std::string> param_files = get_files_in_directory(dir);
     for (const auto& file : param_files) {
-        std::string filename = file.substr(0, file.find_last_of(".")); // 获取不带扩展名的文件名
-        std::cout << filename << "\n";
+        std::string filename = file.substr(0, file.find_last_of("."));
         params[filename] = read_param(dir + "/" + file);
     }
-
-    // // 访问参数时可以使用 params["conv1_weight"]
-    // for (const auto& kv : params) {
-    //     std::cout << "Key: " << kv.first << ", Values: ";
-    //     // for (const auto& value : kv.second) {
-    //     //     std::cout << value << " ";
-    //     // }
-    //     std::cout << std::endl;
-    // }
 
     return params;
 }
@@ -133,12 +121,16 @@ void read_h5_file(const std::string& file_path, std::vector<std::vector<float>>&
     }
 }
 
-
-// 范例kernel函数，无实际作用
-__global__ void add_arrays(int* a, int* b, int* c, int size) {
-    int index = threadIdx.x + blockIdx.x * blockDim.x;
-    if (index < size) {
-        c[index] = a[index] + b[index];
+void save_vector_to_txt(const std::string& filename, const std::vector<float>& data) {
+    std::ofstream file(filename);
+    
+    if (file) {
+        for (const float& value : data) {
+            file << value << "\n";
+        }
+        file.close();
+    } else {
+        ERROR("Unable to open file: %s\n", filename.c_str());
     }
 }
 
@@ -160,47 +152,64 @@ int main(int argc, char *argv[]) {
     // 读取训练集数据
     read_h5_file(file_path, list_of_points, list_of_labels);
 
-    DataLoader* dataloader = new DataLoader(list_of_points, list_of_labels, 8, 10240, true);
+    DataLoader* dataloader = new DataLoader(list_of_points, list_of_labels, 1, 30000, false);
 
     // 开始计时，使用chrono计时，不支持其它计时方式
     auto start = std::chrono::high_resolution_clock::now();
 
+    // for (size_t i = 0; i < list_of_points.size(); i++) {
+    //     Tensor* input = new Tensor({1, list_of_points[i].size()/3, 3});
+    //     input->fromVec(list_of_points[i]);
+    //     input->transpose(-2, -1);
+
+    //     Tensor* output = pointnet->forward(input);
+
+    //     Tensor* pred = output->argmax(-1);
+    //     float* pred_labels = pred->toHost();
+
+    //     printf("%f ", pred_labels[0]);
+        
+    //     std::cout << list_of_labels[i]  << std::endl;
+
+    //     if((int)pred_labels[0] == list_of_labels[i]) {
+    //         right_num += 1;
+    //     }
+    //     delete input, output, pred;
+    // }
+
     unsigned int right_num = 0;
     unsigned int data_sum = list_of_points.size();
     unsigned int batch_num = dataloader->getBatchNum();
+
     
-    for (size_t i = 0; i < 1; i++) {
+
+    Tensor* input = nullptr;
+    Tensor* pred = nullptr;
+    
+    for (size_t i = 0; i < data_sum; i++) {
         std::vector<int> labels;
 
-        Tensor* input = dataloader->getBatchedData(labels);
+        input = dataloader->getBatchedData(labels);
+
         input->transpose(-2, -1);
         Tensor* output = pointnet->forward(input);
-        Tensor* pred = output->argmax(-1);
+
+        pred = output->argmax(-1);
         pred->squeeze();
 
         float* pred_labels = pred->toHost();
 
-        printM(pred_labels, pred->getShape());
-        for(int label: labels) {
-            printf("%d ", label);
+        for(int j=0; j<labels.size(); j++) {
+            if(labels[j] == (int)(pred_labels[j] + 0.5)) right_num++;
         }
-        printf("\n");
         // clean up
-        delete input, output, pred;
-
-    
-        // std::cout << "[" << i+1 << "/" << data_sum << "] Points " << i << ", size=" << n_data << ": ";
-        // printf("%d", int(pred_label[0]+0.5));
-        // // for (const auto& point : list_of_points[i]) {
-        // //     std::cout << point << " ";
-        // // }
-        // std::cout << "\tLabel: " << list_of_labels[i] << std::endl;
-
-        printf("Batch[%d/%d] ", (int)i+1, (int)batch_num);
+        delete input, pred;
+        input = nullptr; pred = nullptr;
+        free(pred_labels); 
 
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = end - start;
-        std::cout << "Time: " << diff.count() << "s" << std::endl;
+        DEBUG_PRINT("Batch[%d/%d] Time: %f s\n", i+1, batch_num, diff.count());
     }
     
     // 向主机端同步以等待所有异步调用的GPU kernel执行完毕，这句必须要有
@@ -211,7 +220,10 @@ int main(int argc, char *argv[]) {
     std::chrono::duration<double> diff = end - start;
 
     // 输出结果，请严格保持此输出格式，并把0.0001替换成实际的准确率，请不要输出除了此结果之外的任何内容！！！
-    std::cout << std::fixed << std::setprecision(4) << diff.count() << right_num << "/" << list_of_points.size() << " (" << (right_num / (float)list_of_points.size()) * 100 << "%)" << std::endl;
+    std::cout << std::fixed << std::setprecision(4) << diff.count() << ":" << right_num/(float)list_of_points.size();
+
+    // clean up
+    delete pointnet;
 
     return 0;
 }

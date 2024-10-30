@@ -4,6 +4,9 @@
 #include <vector>
 #include <algorithm>
 #include <random>
+#include <memory>
+#include <stdexcept>
+
 #include "tensor.cuh"
 
 class DataLoader {

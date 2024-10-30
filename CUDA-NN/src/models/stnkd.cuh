@@ -3,9 +3,9 @@
 
 #include "tensor.cuh"
 #include "layers.cuh"
-// #include "module.cuh"
+#include "base.cuh"
 
-class STNkd: public Module {
+class STNkd: public BaseModel {
     private:
         size_t k;
         
@@ -29,7 +29,7 @@ class STNkd: public Module {
 
         void load_weights();
 
-        Tensor* forward(Tensor* data);
+        Tensor* forward(Tensor* data, Tensor* mask=nullptr);
         Tensor* backward(Tensor* gradients);
 };
 

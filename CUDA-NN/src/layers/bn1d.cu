@@ -37,33 +37,6 @@ void kBn1d_l3(float* d_data, float* d_out, float* weights, float* bias,
     d_out[z*C*L + y*L + x] = relu ? fmaxf(cVal, 0.0) : cVal;
 }
 
-void BatchNorm1d::load_weights() {
-    this->weights->fromVec(Configurer::getWeights(this->prefix + "weight"));
-    this->bias->fromVec(Configurer::getWeights(this->prefix + "bias"));
-    this->running_mean->fromVec(Configurer::getWeights(this->prefix + "running_mean"));
-    this->running_var->fromVec(Configurer::getWeights(this->prefix + "running_var"));
-}
-
-void BatchNorm1d::load_weights(std::vector<float>& params, const std::string& target) {
-    size_t n_data = params.size();
-    float* h_data = params.data();
-    if(target=="weights") {
-        assert(n_data == this->weights->getDataNum());
-        this->weights->load(h_data, n_data);
-    } else if(target == "bias") {
-        assert(n_data == this->bias->getDataNum());
-        this->bias->load(h_data, n_data);
-    } else if(target == "mean") {
-        assert(this->running_mean->getDataNum() == n_data);
-        this->running_mean->load(h_data, n_data);
-    } else if(target == "var") {
-        assert(this->running_var->getDataNum() == n_data);
-        this->running_var->load(h_data, n_data);
-    } else {
-        ERROR("Load weights %s error!\n", target.c_str());
-    }
-}
-
 BatchNorm1d::BatchNorm1d(std::string prefix, size_t num_features, bool relu, float eps, float monmentum, bool affine, bool track_running_stats) {
     this->num_features = num_features;
     this->relu = relu;
@@ -102,8 +75,8 @@ BatchNorm1d::BatchNorm1d(size_t num_features, bool relu, float eps, float monmen
     this->track_running_stats = track_running_stats;
 
     if(affine) {
-        this->weights = new Tensor({num_features}, ONES);
-        this->bias = new Tensor({num_features}, ZERO);
+        this->weights = new Tensor({num_features}, this->is_training ? ONES : NONE);
+        this->bias = new Tensor({num_features}, this->is_training ? ZERO : NONE);
     } else {
         // the output is just centralization
         this->weights = nullptr;
@@ -111,8 +84,8 @@ BatchNorm1d::BatchNorm1d(size_t num_features, bool relu, float eps, float monmen
     }
 
     if(this->track_running_stats) {
-        this->running_mean = new Tensor({num_features}, ZERO);
-        this->running_var = new Tensor({num_features}, ONES);
+        this->running_mean = new Tensor({num_features}, this->is_training ? ZERO : NONE);
+        this->running_var = new Tensor({num_features}, this->is_training ? ONES : NONE);
     } else {
         // use batch statistics(bias estimate)
         this->running_mean = nullptr;
@@ -121,7 +94,35 @@ BatchNorm1d::BatchNorm1d(size_t num_features, bool relu, float eps, float monmen
 }
 
 BatchNorm1d::~BatchNorm1d() {
-    delete running_mean, running_var, weights, bias, input, output, outputBackward;
+    delete running_mean;
+    delete running_var;
+}
+
+void BatchNorm1d::load_weights() {
+    this->weights->fromVec(Configurer::getWeights(this->prefix + "weight"));
+    this->bias->fromVec(Configurer::getWeights(this->prefix + "bias"));
+    this->running_mean->fromVec(Configurer::getWeights(this->prefix + "running_mean"));
+    this->running_var->fromVec(Configurer::getWeights(this->prefix + "running_var"));
+}
+
+void BatchNorm1d::load_weights(std::vector<float>& params, const std::string& target) {
+    size_t n_data = params.size();
+    float* h_data = params.data();
+    if(target=="weights") {
+        assert(n_data == this->weights->getDataNum());
+        this->weights->load(h_data, n_data);
+    } else if(target == "bias") {
+        assert(n_data == this->bias->getDataNum());
+        this->bias->load(h_data, n_data);
+    } else if(target == "mean") {
+        assert(this->running_mean->getDataNum() == n_data);
+        this->running_mean->load(h_data, n_data);
+    } else if(target == "var") {
+        assert(this->running_var->getDataNum() == n_data);
+        this->running_var->load(h_data, n_data);
+    } else {
+        ERROR("Load weights %s error!\n", target.c_str());
+    }
 }
 
 Tensor* BatchNorm1d::forward(Tensor* data) {

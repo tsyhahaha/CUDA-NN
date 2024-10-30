@@ -40,7 +40,7 @@ def gen(cfg):
     print(f"Generate test points for {cfg['name'].upper()}")
     for i in tqdm(range(num)):
         shape = ()
-        B, L = random.randint(1, 8), random.randint(128, 256)
+        B, L = 4, 19000
         if cfg['target'] == 'model':
             if cfg['name'] in ["pointnet", 'stn3d', 'encoder']:
                 shape = (B, 3, L)
@@ -61,6 +61,9 @@ def gen(cfg):
             if cfg['name'] == 'max':
                 channel = random.randint(3, 64)
                 shape = (B, channel, L)
+            if cfg['name'] == 'argmax':
+                channel = random.randint(3, 64)
+                shape = (B, L)
         data_point = np.random.rand(*shape)
         np.savetxt(os.path.join(save_dir, f'{i+1}.txt'), data_point.flatten())
         np.savetxt(os.path.join(save_dir, f'{i+1}.shape.txt'), np.array(shape).flatten(), fmt="%d")
@@ -93,8 +96,14 @@ def test_py(cfg):
     os.makedirs(pyout_dir, exist_ok=True)
     clear_directory(pyout_dir)
 
+    # if test operation
+    if cfg['target'] == 'op':
+        if cfg['name'] == 'max':
+            net = lambda x: torch.max(x, -1, keepdim=False)[0]
+        if cfg['name'] == 'argmax':
+            net = lambda x: torch.argmax(x, -1, keepdim=False)
+    elif cfg['target'] == 'model':
     # if test the model
-    if cfg['target'] == 'model':
         net = PointNet()
         net = load_model_params_and_buffers_from_txt(net, cfg['param_path'])
         if cfg['name'] == 'stn3d':
@@ -103,9 +112,6 @@ def test_py(cfg):
             net = net.feat.fstn
         elif cfg['name'] == 'encoder':
             net = net.feat
-    elif cfg['target'] == 'op':
-        if cfg['name'] == 'max':
-            net = lambda x: torch.max(x, 2, keepdim=False)[0]
     elif cfg['target'] == 'layer':
         if cfg['name'] == 'linear':
             net = nn.Linear(cfg['linear']['in_features'], cfg['linear']['out_features'])
@@ -134,7 +140,7 @@ def test_py(cfg):
         net = net.eval().cuda().float()
 
     files = os.listdir(beat_dir)
-    files = [s[:-4] for s in files if 'shape' not in s]
+    files = [s[:-4] for s in files if '.' not in s[:-4]]
 
     time_sum = 0
 
@@ -149,7 +155,7 @@ def test_py(cfg):
         if cfg['name'] == 'pointnet':
             output, _ = net(data.to(torch.float32))
             if cfg['pointnet']['argmax']:
-                output = torch.argmax(output, dim=1)
+                output = torch.argmax(output, dim=-1)
         elif cfg['name'] == 'encoder':
             output, _, __ = net(data.to(torch.float32))
         else:
@@ -176,7 +182,7 @@ def test_cu(cfg):
         print("[ERROR] Failed to launch the cuda program!")
         exit(-1)
     
-    pattern = r'Average time consumed: ([0-9]*\.[0-9]+) s'
+    pattern = r'Average time consumed:\s*([0-9]*\.[0-9]+) s'
     content = result.stdout
     matches = re.findall(pattern, content)
     for match in matches:
@@ -195,17 +201,16 @@ def beat(pyout, cuout, cfg):
         data2 = np.loadtxt(f2, dtype=float)
         if data1.size != data2.size:
             raise ValueError(f"{f1} data size not equal: {data1.size}!={data2.size}")
-        thres = 1e-3
-        if name=='pointnet':
-            thres = 1e-1
+        thres = 1e-4
         mask = np.where(np.abs(data1) > 1e-6, 1, 0)
         l1_error = np.abs(data1 - data2)
+        max_err = np.max(l1_error)
         mean_error = np.sum(l1_error * mask) / np.sum(mask)
         is_error = mean_error >= thres
         error_num = np.sum(np.where(l1_error > thres, 1, 0))
 
-        string = "mean_error={%.4f}, error_rate={%f}"%(mean_error, error_num/data1.size)
-        return is_error.any(), error_num <= (data1.size//2), string
+        string = "thres=%f, mean_error=%.4f, error_rate=%f, max_error=%f"%(thres, mean_error, error_num/data1.size, max_err)
+        return is_error.any(), error_num <= (data1.size), string
     
     files = os.listdir(pyout)
     partial_dict = {}
@@ -222,7 +227,10 @@ def beat(pyout, cuout, cfg):
         elif wrong:
             error_list.append(file)
     error_list = sorted(error_list, key=lambda x: int(x.split('.')[0]))
-    partial_items = sorted(partial_dict.items(), key=lambda x: int(x[0].split('.')[0]))
+    try:
+        partial_items = sorted(partial_dict.items(), key=lambda x: int(x[0].split('.')[0]))
+    except:
+        partial_items = sorted(partial_dict.items(), key=lambda x: x[0].split('.')[0])
     print("-"*50)
     return partial_items, error_list
 

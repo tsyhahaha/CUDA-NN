@@ -1,6 +1,6 @@
 #pragma once
-#ifndef BASE_H
-#define BASE_H
+#ifndef BASELAYER_H
+#define BASELAYER_H
 
 #include "tensor.cuh"
 #include "module.cuh"
@@ -16,6 +16,7 @@ class BaseLayer: public Module {
         // Tensor* deltaWeights;
         // Tensor* deltaBias;
     public:
+        ~BaseLayer();
         Tensor* getWeights();
         Tensor* getBias();
         // Tensor* getDeltaWeights();
@@ -30,6 +31,9 @@ class BaseLayer: public Module {
 
         void load_weights();
         void reset();
+
+        virtual Tensor* forward(Tensor* data) = 0;
+        virtual Tensor* backward(Tensor* gradients) = 0;
 };
 
-#endif /* !BASE_H */
+#endif /* !BASELAYER_H */

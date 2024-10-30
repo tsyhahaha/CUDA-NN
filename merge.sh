@@ -28,7 +28,12 @@ should_add_line() {
 
     # 判断条件，返回0表示可以添加，返回1表示不可以添加
     if [[ $line =~ ^[[:space:]]*#include[[:space:]]*\<.*\> ]]; then
-                includes+="$line"$'\n'  # 保存尖括号 include 语句
+        line=$(echo "$line" | sed 's/#include[[:space:]]*#include/#include/' | sed 's/[[:space:]]*//g')
+        if [[ -z "${include_set[$line]}" ]]; then
+            includes+="$line"$'\n'  # 保存尖括号 include 语句
+            include_set[$line]=1    # 标记为已添加
+        fi
+        return 1
     # 跳过双引号 include 语句
     elif [[ $line =~ \#include[[:space:]]*\".*\" ]]; then
         return 1
@@ -49,21 +54,17 @@ should_add_line() {
 
 
 # 定义合并的顺序，将 kernels 文件夹放在最前面
-folders=("tensor/kernels" "common" "tensor" "layers" "models")
+folders=("tensor/kernels" "common" "tensor" "layers" "models" "datasets")
 
 # 使用关联数组来指定特定文件夹及其对应的编译顺序
 declare -A specific_folders
 specific_folders=(
-    ["models"]="stn3d stnkd encoder pointnet"
+    ["models"]="base stn3d stnkd encoder pointnet"
     ["layers"]="module base"  # 添加更多的文件夹及其顺序
 )
 
-# specific_folders=("models")
-# specific_seq=("module" "stn3d" "stnkd" "encoder" "pointnet")
-
-# 用于存储所有的尖括号 include 语句
 includes=""
-
+declare -A include_set
 
 # 合并 include 文件夹中的 .cuh 文件
 if [ -d "$include_folder" ]; then

@@ -27,7 +27,7 @@ class PointNet: public Module {
 
         void load_weights();
 
-        Tensor* forward(Tensor* data);
+        Tensor* forward(Tensor* data, Tensor* mask=nullptr);
         Tensor* backward(Tensor* gradients);
 };
 

@@ -7,16 +7,12 @@
 
 class Module {
     protected:
-        bool is_training;
+        bool is_training = false;
         std::string prefix;
     public:
 
         void train();
         void eval();
-
-        virtual Tensor* forward(Tensor* data) = 0;
-        virtual Tensor* backward(Tensor* gradients) = 0;
-
 };
 
 

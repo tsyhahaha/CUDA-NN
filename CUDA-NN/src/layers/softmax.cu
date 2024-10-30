@@ -76,11 +76,6 @@ SoftMax::SoftMax(size_t dim, bool apply_log) {
     this->apply_log = apply_log;
 }
 
-SoftMax::~SoftMax() {
-    delete this->input;
-    delete this->output;
-}
-
 Tensor* SoftMax::forward(Tensor* data) {
     this->reset();
     if(this->is_training)
@@ -105,10 +100,8 @@ Tensor* SoftMax::forward(Tensor* data) {
     int grid = C;
     kSoftmax<<<grid, block>>>(data->getData(), tensor_o->getData(), C, L, this->apply_log); CHECK_KERNEL();
 
-    if(this->is_training){
-        this->output = tensor_o;
-    }
-    return tensor_o;
+    this->output = tensor_o;
+    return this->output;
 }
 
 Tensor* SoftMax::backward(Tensor* gradients) {

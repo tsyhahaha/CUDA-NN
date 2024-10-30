@@ -1,3 +1,3 @@
-nvcc merged.cu -o train -Xcompiler "-O3 -std=c++14" -gencode arch=compute_60,code=sm_60 -gencode arch=compute_61,code=sm_61 -gencode arch=compute_62,code=sm_62 -gencode arch=compute_70,code=sm_70 -lhdf5_cpp -lhdf5
+nvcc merged.cu -o train -I/usr/local/HDF_Group/HDF5/1.14.5/include -L/usr/local/HDF_Group/HDF5/1.14.5/lib -lhdf5 -lhdf5_cpp 
 
-./train
+export LD_LIBRARY_PATH=LD_LIBRARY_PATH:/usr/local/HDF_Group/HDF5/1.14.5/lib

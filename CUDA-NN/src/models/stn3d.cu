@@ -20,7 +20,18 @@ STN3d::STN3d(std::string prefix, size_t channel) {
 }
 
 STN3d::~STN3d() {
-    delete conv1, conv2, conv3, fc1, fc2, fc3, relu, bn1, bn2, bn3, bn4, bn5;
+    delete conv1;
+    delete conv2;
+    delete conv3;
+    delete fc1;
+    delete fc2;
+    delete fc3;
+    delete relu;
+    delete bn1;
+    delete bn2;
+    delete bn3;
+    delete bn4;
+    delete bn5;
 }
 
 void STN3d::load_weights() {
@@ -39,12 +50,12 @@ void STN3d::load_weights() {
     this->bn5->load_weights();
 }
 
-Tensor* STN3d::forward(Tensor* data) {
+Tensor* STN3d::forward(Tensor* data, Tensor* mask) {
     size_t bz = data->getShape()[0];
     Tensor* x = bn1->forward(conv1->forward(data));
     x = bn2->forward(conv2->forward(x));
-
     x = bn3->forward(conv3->forward(x));
+
     x->max_(2, false);
 
     x = bn4->forward(fc1->forward(x));
@@ -60,7 +71,6 @@ Tensor* STN3d::forward(Tensor* data) {
     delete iden;
 
     return o;
-
 }
 
 Tensor* STN3d::backward(Tensor* gradients) {

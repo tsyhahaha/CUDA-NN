@@ -43,12 +43,6 @@ ReLU::ReLU(std::string prefix, bool inplace) {
     this->outputBackward = nullptr;
 }
 
-ReLU::~ReLU() {
-    delete input;
-    delete output;
-    delete outputBackward;
-}
-
 Tensor* ReLU::forward(Tensor* data) {
     this->reset();
     if(this->is_training)

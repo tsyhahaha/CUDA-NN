@@ -9,10 +9,11 @@
 #include<vector>
 #include<algorithm>
 
+#define FETCH_FLOAT4(pointer) (reinterpret_cast<float4 *>(&(pointer))[0])
 typedef std::vector<size_t> DimVector;
 
 enum InitType {
-    ZERO, ONES, IDENTITY, RANDOM, XAVIER, KAIMING
+    NONE, ZERO, ONES, IDENTITY, RANDOM, XAVIER, KAIMING
 };
 
 class Tensor {
@@ -22,7 +23,7 @@ class Tensor {
         DimVector shape;
 
     public:
-        Tensor(DimVector shape, InitType init_type = RANDOM);
+        Tensor(DimVector shape, InitType init_type = NONE);
         Tensor(float *h_data, DimVector shape);
         ~Tensor();
         void fromVec(std::vector<float>& vec);

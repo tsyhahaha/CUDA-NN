@@ -3,10 +3,10 @@
 
 #include "tensor.cuh"
 #include "layers.cuh"
-// #include "module.cuh"
+#include "base.cuh"
 
 /* Maybe it can be acquired by STNkd...... */
-class STN3d: public Module {
+class STN3d: public BaseModel {
     public:
         Conv1d* conv1;
         Conv1d* conv2;
@@ -27,7 +27,7 @@ class STN3d: public Module {
 
         void load_weights();
 
-        Tensor* forward(Tensor* data);
+        Tensor* forward(Tensor* data, Tensor* mask);
         Tensor* backward(Tensor* gradients);
 };
 

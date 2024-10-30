@@ -34,7 +34,6 @@ Tensor::Tensor(float *h_data, DimVector shape) {
 }
 
 Tensor::~Tensor(){
-    // DEBUG_PRINT("Called from %s\n", __FUNCTION__);
     CHECK(cudaFree(this->d_data));
 }
 
@@ -101,6 +100,8 @@ void Tensor::initialize(float value) {
 }
 
 void Tensor::initialize(InitType type) {
+    if(type==NONE) return;
+    
     size_t nBytes = this->n_data * sizeof(float);
     float* h_d = (float *)malloc(nBytes);
     
@@ -188,18 +189,20 @@ void Tensor::transpose() {
     if(this->shape.size() == 2) {
         DimVector shape_o = this->shape;
         std::swap(shape_o[1], shape_o[2]);
-        Tensor* tensor_o = new Tensor(shape_o);
+
+        float* nd_data;
+        CHECK(cudaMalloc((float**)&nd_data, this->n_data * sizeof(float)));
         
         int row = this->shape[0], col = this->shape[1];
         dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
         // ATTENTION!!!
         dim3 grid((col-1)/BLOCK_SIZE2D + 1, (row-1)/BLOCK_SIZE2D + 1);
 
-        kTranspose<<<grid, block>>>(this->d_data, tensor_o->d_data, row, col);
+        kTranspose<<<grid, block>>>(this->d_data, nd_data, row, col);
         CHECK_KERNEL();
 
-        cudaFree(this->d_data);
-        this->d_data = tensor_o->d_data;
+        CHECK(cudaFree(this->d_data));
+        this->d_data = nd_data;
         this->shape = shape_o;
     } else {
         ERROR("Transpose failed: the dim != 2.\n");
@@ -225,16 +228,18 @@ void Tensor::transpose(int dim1, int dim2) {
         if(dim2 == dim - 1) {
             DimVector shape_o = this->shape;
             std::swap(shape_o[1], shape_o[2]);
-            Tensor* tensor_o = new Tensor(shape_o);
+
+            float* nd_data;
+            CHECK(cudaMalloc((float**)&nd_data, this->n_data * sizeof(float)));
 
             size_t N = shape[0], row = shape[1], col = shape[2];
             dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
             dim3 grid((col-1)/BLOCK_SIZE2D + 1, (row-1)/BLOCK_SIZE2D+1);
 
-            kTransposeLast3D<<<grid, block>>>(this->d_data, tensor_o->d_data, N, row, col); CHECK_KERNEL();
+            kTransposeLast3D<<<grid, block>>>(this->d_data, nd_data, N, row, col); CHECK_KERNEL();
 
-            cudaFree(this->d_data);
-            this->d_data = tensor_o->d_data;
+            CHECK(cudaFree(this->d_data));
+            this->d_data = nd_data;
             this->shape = shape_o;
         } else {
             ERROR("dim1=%d, dim2=%d, Not implemented!\n", dim1, dim2);

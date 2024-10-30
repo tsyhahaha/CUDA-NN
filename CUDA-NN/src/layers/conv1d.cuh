@@ -27,7 +27,6 @@ class Conv1d: public BaseLayer {
     public:
         Conv1d(std::string prefix, size_t in_channels, size_t out_channels, size_t kernel_size, bool bias = true);
         Conv1d(size_t in_channels, size_t out_channels, size_t kernel_size, bool bias = true);
-        ~Conv1d();
 
         Tensor* forward(Tensor* data);
         Tensor* backward(Tensor* gradients);

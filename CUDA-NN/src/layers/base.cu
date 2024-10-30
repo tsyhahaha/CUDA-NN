@@ -1,5 +1,23 @@
 #include "base.cuh"
 
+BaseLayer::~BaseLayer(){
+    if(weights != nullptr) {
+        delete weights;
+    }
+    if(bias != nullptr) {
+        delete bias;
+    }
+    if(input != nullptr) {
+        delete input;
+    }
+    if(output != nullptr) {
+        delete output;
+    }
+    if(outputBackward != nullptr) {
+        delete outputBackward;
+    }
+}
+
 Tensor* BaseLayer::getWeights() {
     return this->weights;
 }
@@ -56,6 +74,8 @@ void BaseLayer::reset(){
         this->output = nullptr;
     }
 }
+
+
 
 // Tensor* Layer::getDeltaweightss() {
 //     return this->deltaweightss;

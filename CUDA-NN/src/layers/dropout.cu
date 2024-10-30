@@ -35,12 +35,6 @@ Dropout::Dropout(float p, bool inplace) {
     this->outputBackward = nullptr;
 }
 
-Dropout::~Dropout() {
-    delete this->input;
-    delete this->output;
-    delete this->outputBackward;
-}
-
 
 Tensor* Dropout::forward(Tensor* data) {
     this->reset();

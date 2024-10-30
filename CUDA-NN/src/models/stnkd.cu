@@ -20,8 +20,20 @@ STNkd::STNkd(std::string prefix, size_t k) {
     this->bn5 = new BatchNorm1d(this->prefix+"bn5.", 256, true);
 }
 
+
 STNkd::~STNkd() {
-    delete conv1, conv2, conv3, fc1, fc2, fc3, relu, bn1, bn2, bn3, bn4, bn5;
+    delete conv1;
+    delete conv2;
+    delete conv3;
+    delete fc1;
+    delete fc2;
+    delete fc3;
+    delete relu;
+    delete bn1;
+    delete bn2;
+    delete bn3;
+    delete bn4;
+    delete bn5;
 }
 
 void STNkd::load_weights() {
@@ -40,14 +52,14 @@ void STNkd::load_weights() {
     this->bn5->load_weights();
 }
 
-Tensor* STNkd::forward(Tensor* data) {
+Tensor* STNkd::forward(Tensor* data, Tensor* mask) {
     size_t bz = data->getShape()[0];
     Tensor* x = bn1->forward(conv1->forward(data));
     x = bn2->forward(conv2->forward(x));
     x = bn3->forward(conv3->forward(x));
-    Tensor* max_x = x->max(2, false);
+    x->max_(2, false);
 
-    x = bn4->forward(fc1->forward(max_x));
+    x = bn4->forward(fc1->forward(x));
     x = bn5->forward(fc2->forward(x));
     x = fc3->forward(x);
 

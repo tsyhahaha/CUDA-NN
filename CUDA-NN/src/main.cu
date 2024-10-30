@@ -266,7 +266,7 @@ void test_module(
     float count_sum = 0.0;
     int i=0;
     for(std::string test_file: test_points) {
-        if(test_file.find("shape") == std::string::npos) {
+        if(test_file.find("shape") == std::string::npos && test_file.find("label") == std::string::npos) {
             if(i>=data_num) break; i++;
             std::string base_name = getBaseName(test_file);
             test_file = test_dir + "/" + base_name;
