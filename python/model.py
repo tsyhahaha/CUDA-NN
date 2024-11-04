@@ -29,11 +29,14 @@ class STN3d(nn.Module):
         self.bn4 = nn.BatchNorm1d(512)
         self.bn5 = nn.BatchNorm1d(256)
 
-    def forward(self, x):
+    def forward(self, x, mask=None):
         batchsize = x.size()[0]
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
+        if mask is not None:
+            mask = mask.unsqueeze(1).expand_as(x)
+            x.masked_fill(~mask, float('-inf'))
         x = torch.max(x, 2, keepdim=True)[0]
         x = x.view(-1, 1024)
 
@@ -69,11 +72,14 @@ class STNkd(nn.Module):
 
         self.k = k
 
-    def forward(self, x):
+    def forward(self, x, mask=None):
         batchsize = x.size()[0]
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
+        if mask is not None:
+            mask = mask.unsqueeze(1).expand_as(x)
+            x.masked_fill(~mask, float('-inf'))
         x = torch.max(x, 2, keepdim=True)[0]
         x = x.view(-1, 1024)
 
@@ -105,9 +111,9 @@ class PointNetEncoder(nn.Module):
         if self.feature_transform:
             self.fstn = STNkd(k=64)
 
-    def forward(self, x):
+    def forward(self, x, mask=None):
         B, D, N = x.size()
-        trans = self.stn(x)
+        trans = self.stn(x, mask)
         x = x.transpose(2, 1)
         if D > 3:
             feature = x[:, :, 3:]
@@ -119,7 +125,7 @@ class PointNetEncoder(nn.Module):
         x = F.relu(self.bn1(self.conv1(x)))
 
         if self.feature_transform:
-            trans_feat = self.fstn(x)
+            trans_feat = self.fstn(x, mask)
             x = x.transpose(2, 1)
             x = torch.bmm(x, trans_feat)
             x = x.transpose(2, 1)
@@ -129,6 +135,9 @@ class PointNetEncoder(nn.Module):
         pointfeat = x
         x = F.relu(self.bn2(self.conv2(x)))
         x = self.bn3(self.conv3(x))
+        if mask is not None:
+            mask = mask.unsqueeze(1).expand_as(x)
+            x.masked_fill(~mask, float('-inf'))
         x = torch.max(x, 2, keepdim=True)[0]
         x = x.view(-1, 1024)
         if self.global_feat:
@@ -138,7 +147,7 @@ class PointNetEncoder(nn.Module):
             return torch.cat([x, pointfeat], 1), trans, trans_feat
 
 
-def feature_transform_regularizer(trans):
+def feature_transform_reguliarzer(trans):
     d = trans.size()[1]
     I = torch.eye(d)[None, :, :]
     if trans.is_cuda:
@@ -163,8 +172,8 @@ class PointNet(nn.Module):
         self.bn2 = nn.BatchNorm1d(256)
         self.relu = nn.ReLU()
 
-    def forward(self, x):
-        x, trans, trans_feat = self.feat(x)
+    def forward(self, x, mask=None):
+        x, trans, trans_feat = self.feat(x, mask)
         x = F.relu(self.bn1(self.fc1(x)))
         x = F.relu(self.bn2(self.dropout(self.fc2(x))))
         x = self.fc3(x)

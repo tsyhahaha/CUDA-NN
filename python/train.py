@@ -17,8 +17,8 @@ from dataset import PointCloudDataset, pad_collate_fn, random_point_dropout, ran
 cfg = {
     'num_class': 10,
     'total_epoch': 200,
-    'batch_size': 32,
-    'accumulation_step': 4,
+    'batch_size': 2,
+    'accumulation_step': 1,
 }
 
 
@@ -93,7 +93,7 @@ def setup():
 def main():
     setup()
 
-    data_path = '../'
+    data_path = '/home/tsyhahaha/CUDA-NN/data/splits'
 
     train_dataset = PointCloudDataset(root=data_path, split='train')
     test_dataset = PointCloudDataset(root=data_path, split='test')

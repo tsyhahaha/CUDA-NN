@@ -67,11 +67,30 @@ class PointCloudDataset(Dataset):
     
 def pad_collate_fn(batch):
     # padding -> chunk
-    min_size = min([item[0].shape[0] for item in batch])
+    min_size = max([item[0].shape[0] for item in batch])
     
     padded_batch = []
     for points, target in batch:
-        points = points[:min_size, :]
+        points = points[:,]
         padded_batch.append((points, target))
+    
+    return torch.utils.data.dataloader.default_collate(padded_batch)
+
+def inference_pad_collate_fn(batch):
+    # padding -> chunk
+    # max_size = max([item[0].shape[0] for item in batch])
+    max_size = 30000
+    
+    padded_batch = []
+    for points, target in batch:
+        points = torch.from_numpy(points)[:max_size,:]
+        pad_length = max_size - points.shape[0]
+        mask = torch.ones(max_size)
+
+        if pad_length > 0:
+            mask[points.shape[0]:] = 0
+            points = torch.nn.functional.pad(points, (0, 0, 0, pad_length), mode='constant', value=0)
+            mask = mask.to(bool)
+        padded_batch.append((points, target, mask))
     
     return torch.utils.data.dataloader.default_collate(padded_batch)
