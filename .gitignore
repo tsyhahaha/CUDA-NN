@@ -1,5 +1,7 @@
 *.o
+*.ncu-rep
 tests/
+data/
 
 bin/
 build/
@@ -7,3 +9,4 @@ build/
 .VSCodeCounter/
 __pycache__/
 logs/
+checkpoints/
