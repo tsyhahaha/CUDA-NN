@@ -66,5 +66,7 @@ Layer involved:
 * MaxPool
 * ReLU
 * Sigmoid
-* Dropout
+* Dropout(training)
+
+However, to reduce the launch cost of the kernel, some layers can be merged.
 
