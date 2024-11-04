@@ -1,6 +1,24 @@
 #include "kernels.cuh"
 #include "configure.cuh"
 
+__global__
+void kMaskFillLast3D(float* d_data, float* mask, float value, int N, int C, int L) {
+    int z = blockIdx.z * blockDim.z + threadIdx.z;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int offset = z*C*L + y*L + x;
+
+    int mask_range = 0;
+
+    if(z < N) {
+        mask_range = (int)mask[z];
+    }
+
+    if(z < N && y < C && x < L && x >= mask_range) {
+        d_data[offset] =  value;
+    }   
+}
+
 
 __global__
 void kMaxLastDim3D(float* d_data, float* d_out, size_t N, size_t C, size_t L
@@ -13,7 +31,7 @@ void kMaxLastDim3D(float* d_data, float* d_out, size_t N, size_t C, size_t L
     // if(x >= C || y >= N) return;
 
     __shared__ float sd_M[BLOCK_SIZE1D];
-    float cur_max = 0.0f;
+    float cur_max = -1e6f;
 
     int iter = (L-1)/BLOCK_SIZE1D + 1;
     for(int i=0; i<iter; i++) {
@@ -46,7 +64,7 @@ void kMaxLastDim2D(float* d_data, float* d_out, size_t C, size_t L
     int tid = threadIdx.x;
 
     __shared__ float sd_M[BLOCK_SIZE1D];
-    float cur_max = 0.0f;
+    float cur_max = -1e6f;
 
     int iter = (L-1)/BLOCK_SIZE1D + 1;
     for(int i=0; i<iter; i++) {
@@ -146,32 +164,32 @@ void kSumLastDim2D(float* d_data, float* d_out, size_t C, size_t L
         d_out[x] = cVal;
 }
 
+
+/* batched */
 __global__
 void kTransposeLast3D(float* d_data, float* d_out, size_t N, size_t row, size_t col
 ){
-    __shared__ float sd_M[BLOCK_SIZE2D][BLOCK_SIZE2D];
+    int batch = blockIdx.z * blockDim.z + threadIdx.z;
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
 
-    for(int b=0; b<N; b++) {
-        int x = blockIdx.x * blockDim.x + threadIdx.x;
-        int y = blockIdx.y * blockDim.y + threadIdx.y;
-        int stride = b*row*col;
+    if(batch >= N) return;
 
-        // if(y < row && x < col)
-        //     d_out[stride + x*row + y] = d_data[stride + y*col + x];
+    __shared__ float sd_M[BATCH_BASE][BLOCK_SIZE2D][BLOCK_SIZE2D];
+    
+    int stride = batch*row*col;
 
-        if(y < row && x < col) {
-            sd_M[threadIdx.y][threadIdx.x] = d_data[stride + y*col + x];
-        } else {
-            sd_M[threadIdx.y][threadIdx.x] = 0.0f;
-        }
-        __syncthreads();
-
-        if(y < row && x < col) {
-            d_out[stride + x*row + y] = sd_M[threadIdx.y][threadIdx.x];
-        }
-        __syncthreads();
-
+    if(y < row && x < col) {
+        sd_M[threadIdx.z][threadIdx.y][threadIdx.x] = d_data[stride + y*col + x];
+    } else {
+        sd_M[threadIdx.z][threadIdx.y][threadIdx.x] = 0.0f;
     }
+    __syncthreads();
+
+    if(y < row && x < col) {
+        d_out[stride + x*row + y] = sd_M[threadIdx.z][threadIdx.y][threadIdx.x];
+    }
+    __syncthreads();
 }
 
 __global__

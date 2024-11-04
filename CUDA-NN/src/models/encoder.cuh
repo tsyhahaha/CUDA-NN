@@ -12,6 +12,10 @@ class Encoder: public BaseModel {
         bool global_feat;
         bool feature_transform;
         size_t channel;
+        Tensor* p_trans = nullptr;
+        Tensor* f_trans = nullptr;
+        Tensor* output = nullptr;
+
     public:
         STN3d* stn;
         STNkd* fstn;
@@ -29,7 +33,7 @@ class Encoder: public BaseModel {
 
         void load_weights();
 
-        Tensor* forward(Tensor* data, Tensor* mask = nullptr);
+        Tensor* forward(Tensor* data, Tensor* mask);
         Tensor* backward(Tensor* gradients);
 };
 

@@ -321,16 +321,29 @@ im2col to accelerate conv1d op
  - output(reshape): (N x C_out x L_in) or (C_out x L_in)
 */
 Tensor* Conv1d::forward(Tensor* data) {
-    this->reset();
+    size_t dim = data->getDim();
+    DimVector shape_in = data->getShape();
+    DimVector shape_o;
+
+    if(dim == 2) {
+        shape_o = {out_channels, shape_in[1]};
+    } else if(dim==3) {
+        shape_o = {shape_in[0], out_channels, shape_in[2]};
+    } else {
+        ERROR("Not implemented!\n");
+    }
+    
+    if(output ==nullptr) {
+        this->output = new Tensor(shape_o);
+    }
+    this->output->reset(shape_o);
+
     if(this->is_training)
         this->input = data;
 
-    size_t dim = data->getDim();
-    DimVector shape_in = data->getShape();
+    
     if(dim == 2) {
         size_t C_in = in_channels, C_out = out_channels, L = shape_in[1];
-        this->output = new Tensor({C_out, L});
-
         dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
         dim3 grid((L-1)/BLOCK_SIZE2D+1, (C_out-1)/BLOCK_SIZE2D+1);
 
@@ -338,7 +351,6 @@ Tensor* Conv1d::forward(Tensor* data) {
     } else if(dim == 3) {
         size_t C_in = in_channels, C_out = out_channels;
         size_t L = shape_in[2], N = shape_in[0];
-        this->output = new Tensor({N, C_out, L});
 
         dim3 block(BLOCK_SIZE3D, BLOCK_SIZE3D, BATCH_BASE);
         dim3 grid((L-1)/(BLOCK_SIZE3D*TN)+1, (C_out-1)/(BLOCK_SIZE3D*TM)+1, (N-1)/BATCH_BASE + 1);

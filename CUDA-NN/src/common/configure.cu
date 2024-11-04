@@ -3,9 +3,9 @@
 
 
 void Configurer::set_global_weights(const std::map<std::string, std::vector<float>>& weight_map) {
-    for (const auto& pair : weight_map) {
-        DEBUG_PRINT("%s\n", pair.first.c_str());
-    }
+    // for (const auto& pair : weight_map) {
+    //     DEBUG_PRINT("%s\n", pair.first.c_str());
+    // }
     global_weight_map = weight_map;
 }
 
@@ -25,6 +25,14 @@ int Configurer::getIntValue(std::string variableName, int defaultValue) {
     }
     return std::atoi(envValue);
 }
+
+size_t Configurer::getUIntValue(std::string variableName, size_t defaultValue) {
+        char* envValue = std::getenv(variableName.c_str());
+        if (!envValue) {
+            return defaultValue;
+        }
+        return static_cast<size_t>(std::strtoull(envValue, nullptr, 10));
+    }
 
 float Configurer::getFloatValue(std::string variableName, float defaultValue) {
     char* envValue = std::getenv(variableName.c_str());
@@ -58,16 +66,7 @@ void Configurer::printCUDAConfiguration() {
 
 std::map<std::string, std::vector<float>> Configurer::global_weight_map;
 
-// float Configurer::learningRate = getFloatValue("LEARNING_RATE", DEFAULT_LEARNING_RATE);
-// int Configurer::numberOfEpochs = getIntValue("NUMBER_OF_EPOCHS", DEFAULT_NUMBER_OF_EPOCHS);
-// int Configurer::batchSize = getIntValue("BATCH_SIZE", DEFAULT_BATCH_SIZE);
-
-// int Configurer::tensorAddBlockSize = getIntValue("TENSOR2D_ADD_BLOCK_SIZE", DEFAULT_TENSOR_ADD_BLOCK_SIZE);
-// int Configurer::tensorSubtractBlockSize = getIntValue("TENSOR2D_SUBTRACT_BLOCK_SIZE", DEFAULT_TENSOR2D_SUBTRACT_BLOCK_SIZE);
-// int Configurer::tensorScaleBlockSize = getIntValue("TENSOR2D_SCALE_BLOCK_SIZE", DEFAULT_TENSOR2D_SCALE_BLOCK_SIZE);
-// int Configurer::tensorMultiplyBlockSize = getIntValue("TENSOR2D_MULTIPLY_BLOCK_SIZE", DEFAULT_TENSOR2D_MULTIPLY_BLOCK_SIZE);
-// int Configurer::tensorMultiplyBlockNumber = getIntValue("TENSOR2D_MULTIPLY_BLOCK_NUMBER", DEFAULT_TENSOR2D_MULTIPLY_BLOCK_NUMBER);
-// int Configurer::tensorMultiplySharedMemory = getIntValue("TENSOR2D_MULTIPLY_SHARED_MEMORY", DEFAULT_TENSOR2D_MULTIPLY_SHARED_MEMORY);
-// int Configurer::tensorMeanBlockSize = getIntValue("TENSOR2D_MEAN_BLOCK_SIZE", DEFAULT_TENSOR2D_MEAN_BLOCK_SIZE);
-
-// int Configurer::reLuBlockSize = getIntValue("RELU_BLOCK_SIZE", DEFAULT_TENSOR2D_RELU_BLOCK_SIZE);
+float Configurer::learning_rate = getFloatValue("LEARNING_RATE", DEFAULT_LEARNING_RATE);
+size_t Configurer::epochs = getUIntValue("EPOCHS", DEFAULT_EPOCHS);
+size_t Configurer::batch_size = getUIntValue("BATCH_SIZE", DEFAULT_BATCH_SIZE);
+size_t Configurer::cropping_size = getUIntValue("CROPPING_SIZE", DEFAULT_CROPPING_SIZE);

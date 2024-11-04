@@ -18,6 +18,12 @@ STNkd::STNkd(std::string prefix, size_t k) {
     this->bn3 = new BatchNorm1d(this->prefix+"bn3.", 1024, true);
     this->bn4 = new BatchNorm1d(this->prefix+"bn4.", 512, true);
     this->bn5 = new BatchNorm1d(this->prefix+"bn5.", 256, true);
+
+    this->iden = new Tensor({this->k,this->k}, IDENTITY);
+    iden->flatten();
+
+    this->o = new Tensor({Configurer::batch_size, 1024});
+    this->output = new Tensor({Configurer::batch_size, k*k});
 }
 
 
@@ -34,6 +40,10 @@ STNkd::~STNkd() {
     delete bn3;
     delete bn4;
     delete bn5;
+    delete iden;
+
+    if(o != nullptr) delete o;
+    if(output != nullptr) delete output;
 }
 
 void STNkd::load_weights() {
@@ -57,22 +67,28 @@ Tensor* STNkd::forward(Tensor* data, Tensor* mask) {
     Tensor* x = bn1->forward(conv1->forward(data));
     x = bn2->forward(conv2->forward(x));
     x = bn3->forward(conv3->forward(x));
-    x->max_(2, false);
+    if(mask->getSize() > 0) { 
+        x->mask_fill_(mask, 2, FP32_MIN);
+    }
 
-    x = bn4->forward(fc1->forward(x));
+    x->max(o, 2, false);
+
+    x = bn4->forward(fc1->forward(o));
     x = bn5->forward(fc2->forward(x));
     x = fc3->forward(x);
 
-    Tensor* iden = new Tensor({this->k,this->k}, IDENTITY);
-    iden->flatten();
+    // if(output != nullptr) {
+    //     output->setShape({bz, k*k});
+    // } else output = new Tensor({bz, k*k});
+    // output->copyFrom(x);
 
-    Tensor* o = x->add(iden);
-    o->reshape({bz, this->k, this->k});
+    // output->add_(iden);
+    // output->reshape({bz, k, k});
 
-    // clean up
-    delete iden;
+    x->add_(iden);
+    x->reshape({bz, k, k});
 
-    return o;
+    return x;
 }
 
 Tensor* STNkd::backward(Tensor* gradients) {

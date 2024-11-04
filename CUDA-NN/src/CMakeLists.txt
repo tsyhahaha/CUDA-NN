@@ -27,8 +27,6 @@ target_link_libraries(test1 common tensor layers models datasets
     -lhdf5 -lhdf5_cpp)
 
 
-
-
 add_custom_target(run
     COMMAND main   
     DEPENDS main  

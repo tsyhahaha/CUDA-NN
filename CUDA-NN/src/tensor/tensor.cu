@@ -10,44 +10,69 @@ DimVector getBatchMatmulShape(DimVector& shape1, DimVector& shape2);
 Tensor::Tensor(DimVector shape, InitType init_type) {
     this->shape = shape;
     int dim = shape.size();
-    size_t ndata = 1;
-    for(int i=0; i<dim; i++) {
-        ndata *= shape[i];
-    }
-    this->n_data = ndata;
-    CHECK(cudaMalloc(&(this->d_data), ndata * sizeof(float)));
+    this->n_data = accumulate(shape.begin(), shape.end(), 1, std::multiplies<size_t>());
+    CHECK(cudaMalloc(&(this->d_data), this->n_data * sizeof(float)));
 
     this->initialize(init_type);
 }
 
-Tensor::Tensor(float *h_data, DimVector shape) {
-    int dim = shape.size();
-    this->shape = shape;
-    size_t ndata = 1;
-    for(int i=0; i<dim; i++) {
-        ndata *= shape[i];
-    }
-    this->n_data = ndata;
-    size_t nBytes = ndata * sizeof(float);
-    CHECK(cudaMalloc((float **)&(this->d_data), nBytes));
-    CHECK(cudaMemcpy(d_data, h_data, nBytes, cudaMemcpyHostToDevice));
+Tensor::Tensor(const Tensor &other) {
+    this->shape = other.shape;
+    this->n_data = other.n_data;
+    CHECK(cudaMalloc(&(this->d_data), this->n_data * sizeof(float)));
+    CHECK(cudaMemcpy(this->d_data, other.d_data, this->n_data * sizeof(float), cudaMemcpyDeviceToDevice));
 }
+
 
 Tensor::~Tensor(){
     CHECK(cudaFree(this->d_data));
+
+    if(this->transpose_cache != nullptr) {
+        CHECK(cudaFree(this->transpose_cache));
+    }
+}
+
+void Tensor::reset(DimVector shape) {
+    size_t size = accumulate(shape.begin(), shape.end(), 1, std::multiplies<size_t>());
+    if(this->getSize() >= size) {
+        this->shape = shape;
+    } else {
+        printShape(this->shape);
+        printShape(shape);
+        DEBUG_PRINT("%ld < %ld, tensor has been reset\n", this->getSize(), size);
+        this->n_data = size;
+        this->shape = shape;
+        CHECK(cudaFree(this->d_data));
+        CHECK(cudaMalloc((float**)(&this->d_data), size * sizeof(float)));
+    }
 }
 
 void Tensor::fromVec(std::vector<float>& vec) {
-    if(vec.size() != this->n_data) {
+    if(vec.size() > this->n_data) {
         ERROR("%ld != %ld, weight size not matched!\n", vec.size(), this->n_data);
     }
     float* h_data = vec.data();
-    CHECK(cudaMemcpy(this->d_data, h_data, this->n_data * sizeof(float), cudaMemcpyHostToDevice));
+    CHECK(cudaMemcpy(this->d_data, h_data, vec.size() * sizeof(float), cudaMemcpyHostToDevice));
+}
+
+void Tensor::copyFrom(Tensor* x) {
+    if (this->getSize() >= x->getSize()) {
+        CHECK(cudaMemcpy(this->getData(), x->getData(), x->n_data * sizeof(float), cudaMemcpyDeviceToDevice));
+    } else {
+        DEBUG_PRINT("copyFrom newly alloced!\n");
+        printShape(this->getShape());
+        printShape(x->getShape());
+        CHECK(cudaFree(this->d_data)); 
+        this->shape = x->getShape();
+        this->n_data = x->getSize();
+        CHECK(cudaMalloc(&(this->d_data), this->n_data * sizeof(float)));
+        CHECK(cudaMemcpy(this->getData(), x->getData(), this->getSize() * sizeof(float), cudaMemcpyDeviceToDevice));
+    }
 }
 
 std::vector<float> Tensor::toVec() {
     float* h_data = this->toHost();
-    size_t size = this->getDataNum();
+    size_t size = this->getSize();
     std::vector<float> vec(h_data, h_data + size);
     return vec;
 }
@@ -58,7 +83,12 @@ size_t Tensor::getDim() {
     return this->shape.size();
 }
 
-size_t Tensor::getDataNum() {
+size_t Tensor::getSize() {
+    size_t size = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<size_t>());
+    if(this->n_data < size) {
+        this->n_data = size;
+    }
+
     return this->n_data;
 }
 
@@ -82,6 +112,19 @@ float* Tensor::getData() {
 }
 
 /* setters */
+
+void Tensor::setShape(DimVector shape) {
+    size_t size = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<size_t>());
+    if(size <= this->n_data) {
+        this->shape = shape;
+    } else {
+        ERROR("Failed to setShape: %ld < %ld space not enough\n", this->n_data, size);
+    }
+}
+
+void Tensor::setData(float* data) {
+    this->d_data = data;
+}
 
 void Tensor::load(float* h_data, size_t n_data) {
     assert(n_data = this->n_data);
@@ -142,6 +185,7 @@ void Tensor::initialize(InitType type) {
     }
     
     CHECK(cudaMemcpy(d_data, h_d, nBytes, cudaMemcpyHostToDevice));
+    DEBUG_PRINT("memcpy 8, inittype=%d\n", type);
     free(h_d);
 }
 
@@ -168,7 +212,11 @@ void Tensor::reshape(DimVector shape_n) {
     size_t dim = this->getDim();
     size_t dim_n = shape_n.size();
 
+    if(shape_n == this->shape) return;
+
     if(dim_n == dim) {
+        printShape(this->shape);
+        printShape(shape_n);
         // dim swap, internal transpose?
         // TODO
         ERROR("Not implemented!\n");
@@ -182,7 +230,7 @@ void Tensor::reshape(DimVector shape_n) {
 }
 
 void Tensor::flatten() {
-    this->shape = {this->n_data};
+    this->shape = {accumulate(shape.begin(), shape.end(), (size_t)1, std::multiplies<size_t>())};
 }
 
 void Tensor::transpose() {
@@ -190,19 +238,19 @@ void Tensor::transpose() {
         DimVector shape_o = this->shape;
         std::swap(shape_o[1], shape_o[2]);
 
-        float* nd_data;
-        CHECK(cudaMalloc((float**)&nd_data, this->n_data * sizeof(float)));
-        
+        if(this->transpose_cache == nullptr) {
+            CHECK(cudaMalloc((float**)&transpose_cache, this->n_data * sizeof(float)));
+        }
+
         int row = this->shape[0], col = this->shape[1];
         dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
-        // ATTENTION!!!
         dim3 grid((col-1)/BLOCK_SIZE2D + 1, (row-1)/BLOCK_SIZE2D + 1);
 
-        kTranspose<<<grid, block>>>(this->d_data, nd_data, row, col);
-        CHECK_KERNEL();
+        kTranspose<<<grid, block>>>(this->d_data, transpose_cache, row, col); CHECK_KERNEL();
 
-        CHECK(cudaFree(this->d_data));
-        this->d_data = nd_data;
+        float* tmp = this->d_data;
+        this->d_data = transpose_cache;
+        this->transpose_cache = tmp;
         this->shape = shape_o;
     } else {
         ERROR("Transpose failed: the dim != 2.\n");
@@ -229,17 +277,19 @@ void Tensor::transpose(int dim1, int dim2) {
             DimVector shape_o = this->shape;
             std::swap(shape_o[1], shape_o[2]);
 
-            float* nd_data;
-            CHECK(cudaMalloc((float**)&nd_data, this->n_data * sizeof(float)));
+            if(this->transpose_cache == nullptr) {
+                CHECK(cudaMalloc((float**)&transpose_cache, this->n_data * sizeof(float)));
+            }
 
             size_t N = shape[0], row = shape[1], col = shape[2];
-            dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
-            dim3 grid((col-1)/BLOCK_SIZE2D + 1, (row-1)/BLOCK_SIZE2D+1);
+            dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D, BATCH_BASE);
+            dim3 grid((col-1)/BLOCK_SIZE2D + 1, (row-1)/BLOCK_SIZE2D+1, (N-1)/BATCH_BASE + 1);
 
-            kTransposeLast3D<<<grid, block>>>(this->d_data, nd_data, N, row, col); CHECK_KERNEL();
+            kTransposeLast3D<<<grid, block>>>(this->d_data, this->transpose_cache, N, row, col); CHECK_KERNEL();
 
-            CHECK(cudaFree(this->d_data));
-            this->d_data = nd_data;
+            float* tmp = this->d_data;
+            this->d_data = transpose_cache;
+            this->transpose_cache = tmp;
             this->shape = shape_o;
         } else {
             ERROR("dim1=%d, dim2=%d, Not implemented!\n", dim1, dim2);
@@ -253,6 +303,30 @@ void Tensor::scale_(float factor) {
     // need padding?
     kScale<<<grid, block>>>(this->d_data, factor, 0.0f, this->n_data);
     CHECK_KERNEL();
+}
+
+void Tensor::mask_fill_(Tensor*& mask, int dim, float value) {
+    if(this->shape[0] != mask->getSize(0)) {
+        ERROR("Batch size not matched: %ld != %ld\n", this->shape[0], mask->getSize(0));
+    }
+
+    if(dim < 0) dim += this->getDim();
+
+    if(dim == 2) {  // last dimension
+        // int* d_mask;
+        int N = shape[0], C=shape[1], L=shape[2];
+
+        dim3 block(BLOCK_SIZE3D, BLOCK_SIZE3D, BATCH_BASE);
+        dim3 grid((L-1)/BLOCK_SIZE3D + 1, (C-1)/BLOCK_SIZE3D+1, (N-1)/BATCH_BASE+1);
+
+        // CHECK(cudaMalloc((int**)&d_mask, sizeof(int)*mask.size()));
+        // CHECK(cudaMemcpy(d_mask, mask.data(), sizeof(int)*mask.size(), cudaMemcpyHostToDevice));
+        // DEBUG_PRINT("memcpy 10\n");
+
+        kMaskFillLast3D<<<grid, block>>>(this->d_data, mask->getData(), value, N, C, L); CHECK_KERNEL();
+    } else {
+        ERROR("Not implemented!\n");
+    }
 }
 
 Tensor* Tensor::exp() {
@@ -316,11 +390,12 @@ float Tensor::sum(){
 
     kSum<<<block_num, BLOCK_SIZE1D>>>(this->d_data, d_out, this->n_data);CHECK_KERNEL();
 
-    size_t nBytes = sizeof(float);
-    float* h_out = (float *)malloc(nBytes);
-    CHECK(cudaMemcpy(h_out, d_out, nBytes, cudaMemcpyDeviceToHost));
+    float* h_out = (float *)malloc(sizeof(float));
+    CHECK(cudaMemcpy(h_out, d_out, sizeof(float), cudaMemcpyDeviceToHost));
     CHECK(cudaFree(d_out));
-    return *h_out;
+    DEBUG_PRINT("memcpy 11\n");
+    float tmp = h_out[0]; free(h_out);
+    return tmp;
 }
 
 Tensor* Tensor::sum(int dim){
@@ -368,7 +443,7 @@ Tensor* Tensor::argmax(int dim, bool keepDim) {
             tensor_o->n_data /= shape[dim];
             tensor_o->shape[dim] = 1;
             if(!keepDim)
-                this->squeeze(-1);
+                tensor_o->squeeze(-1);
                 
             return tensor_o;
         } else {
@@ -378,6 +453,38 @@ Tensor* Tensor::argmax(int dim, bool keepDim) {
         ERROR("size=%d<dim=%d\n", size, dim);
     }
     return tensor_o;
+}
+
+void Tensor::argmax(Tensor*& output, int dim, bool keepDim) {
+    int size = this->shape.size();
+    if(dim < 0) {
+        dim = size + dim;
+    }
+
+    DimVector shape_o = this->shape;
+    shape_o[dim] = 1;
+    if(!keepDim) {
+        shape_o.erase(std::remove(shape_o.begin(), shape_o.end(), 1), shape_o.end());
+    }
+    if (output == nullptr) {
+        output = new Tensor(shape_o); 
+    }
+    output->reset(shape_o);
+
+    if(dim < size) {
+        if(size == 2 && dim==size-1) {
+            // used for getting the label
+            size_t C=this->shape[0], L=this->shape[1];
+            int block = BLOCK_SIZE1D;   // BLOCK_SIZE could be larger
+            int grid = C;
+
+            kArgmaxLastDim2D<<<grid, block>>>(this->d_data, output->d_data, C, L); CHECK_KERNEL();
+        } else {
+            ERROR("Not implementated: size=%d dim=%d\n", size, dim);
+        }
+    } else {
+        ERROR("size=%d<dim=%d\n", size, dim);
+    }
 }
 
 void Tensor::max_(int dim, bool keepDim){
@@ -403,6 +510,57 @@ void Tensor::max_(int dim, bool keepDim){
         }
     }
 }
+
+
+Tensor* Tensor::max(Tensor*& output, int dim, bool keepDim) {
+    int size = this->shape.size();
+    if (dim < 0) dim = size + dim;
+    DimVector shape_o = this->shape;
+    shape_o[dim] = 1;
+    if(!keepDim) {
+        shape_o.erase(std::remove(shape_o.begin(), shape_o.end(), 1), shape_o.end());
+    }
+
+    if (output == nullptr) {
+        output = new Tensor(shape_o); 
+    }
+    output->reset(shape_o);
+
+
+    if (dim < size) {
+        if (size == 3 && dim == size - 1) {
+            size_t N = this->shape[0], C = this->shape[1], L = this->shape[2];
+            int block = BLOCK_SIZE1D;
+            dim3 grid(C, N);
+            kMaxLastDim3D<<<grid, block>>>(this->d_data, output->d_data, N, C, L); CHECK_KERNEL();
+
+            output->n_data /= this->shape[dim];
+            output->shape[dim] = 1;
+            if (!keepDim) {
+                output->squeeze(-1);
+            }
+            return output;
+        } else if (size == 2 && dim == size - 1) {
+            size_t C = this->shape[0], L = this->shape[1];
+            int block = BLOCK_SIZE1D;
+            int grid = C;
+
+            kMaxLastDim2D<<<grid, block>>>(this->d_data, output->d_data, C, L); CHECK_KERNEL();
+
+            output->n_data /= this->shape[dim];
+            output->shape[dim] = 1;
+            if (!keepDim) {
+                output->squeeze(-1);
+            }
+            return output; // 直接返回传入的 output
+        } else {
+            ERROR("Not implemented!\n");
+        }
+    }
+
+    return output; // 如果没有进入 kernel，直接返回 output
+}
+
 
 Tensor* Tensor::max(int dim, bool keepDim){
     int size = this->shape.size();
@@ -470,6 +628,71 @@ void Tensor::unsqueeze(int idx) {
 }
 
 /* Binary op */
+
+void Tensor::saxpy_(Tensor* tensor, float f1, float f2) {
+    size_t d1 = this->getDim(), d2 = tensor->getDim();
+    // bool ge = d1 >= d2;
+    // Tensor& mat1 = ge ? *this : *tensor;
+    // Tensor& mat2 = ge ? *tensor : *this;
+    // DimVector shape1 = ge ? this->shape : tensor->shape;
+    // DimVector shape2 = ge ? tensor->shape : this->shape;
+    DimVector shape1 = this->shape;
+    DimVector shape2 = tensor->shape;
+    size_t dim = d1 >= d2 ? d1 : d2;
+
+    DimVector stride1(dim);
+    DimVector stride2(dim);
+    DimVector shape_o = getBroadcastShape(shape1, shape2, stride1, stride2);
+    if(shape_o != this->getShape()) {
+        ERROR("Inplace saxpy failed!");
+        printShape(this->getShape());
+        printShape(shape_o);
+
+    }
+
+    if(shape_o.size() > 0) {
+        if(dim == 1) {
+            // e.x. shape1: (N) shape2: (N) or (1)
+            int block = BLOCK_SIZE1D;
+            int grid = (shape_o[0] - 1) / block + 1;
+            int s1 = stride1[0], s2 = stride2[0];
+
+            kAddStride_l1<<<grid, block>>>(this->d_data, tensor->d_data, this->d_data, this->n_data, f1, f2, s1, s2); CHECK_KERNEL();
+        } else if(dim == 2) {
+            dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
+            int row = shape_o[0], col = shape_o[1];
+            dim3 grid((col-1)/BLOCK_SIZE2D+1, (row-1)/BLOCK_SIZE2D+1);
+
+            // e.x. shape1: (B x N), shape2: (N) or else
+            int s11 = stride1[0], s12 = stride1[1];
+            int s21 = stride2[0], s22 = stride2[1];
+
+            kAddStride_l2<<<grid, block>>>(this->d_data, tensor->d_data, this->d_data, row, col, f1 ,f2, s11, s12, s21, s22); CHECK_KERNEL();
+        } else if(dim == 3) {
+            dim3 block(BLOCK_SIZE3D, BLOCK_SIZE3D, BLOCK_SIZE3D);
+            int z = shape_o[0], y = shape_o[1], x = shape_o[2];
+            dim3 grid((x-1)/BLOCK_SIZE3D+1, (y-1)/BLOCK_SIZE3D+1, (z-1)/BLOCK_SIZE3D+1);
+
+            // e.x. shape1: (B x N), shape2: (N) or else
+            int s11 = stride1[0], s12 = stride1[1], s13 = stride1[2];
+            int s21 = stride2[0], s22 = stride2[1], s23 = stride2[2];
+
+            kAddStride_l3<<<grid, block>>>(this->d_data, tensor->d_data, this->d_data, z, y, x, f1 ,f2, s11, s12, s13, s21, s22, s23); CHECK_KERNEL();
+        } else {
+            ERROR("Not implemented!\n");
+        }
+    } else {
+        ERROR("Failed to align the dimension!\n");
+    }
+}
+
+void Tensor::add_(Tensor* tensor) {
+    saxpy_(tensor, 1.0f, 1.0f);
+}
+
+void Tensor::sub_(Tensor* tensor) {
+    saxpy_(tensor, 1.0f, -1.0f);
+}
 
 Tensor* Tensor::saxpy(Tensor* tensor, float f1, float f2) {
     size_t d1 = this->getDim(), d2 = tensor->getDim();
@@ -626,6 +849,7 @@ Tensor* Tensor::matmul(Tensor* tensor) {
             CHECK(cudaMalloc((float **)&d_tmp, grid * sizeof(float)));
             kMatmul_l1<<<grid, block>>>((&mat1)->d_data, (&mat2)->d_data, d_tmp, this->n_data); CHECK_KERNEL();
             CHECK(cudaMemcpy(tensor_o->d_data, d_tmp, sizeof(float), cudaMemcpyDeviceToDevice));
+            DEBUG_PRINT("memcpy 12\n");
             CHECK(cudaFree(d_tmp));
         } else if(dim1 == 2) {
             if(dim2 == 1) {
@@ -672,6 +896,30 @@ Tensor* Tensor::bmm(Tensor* tensor) {
     kBatchMatmul3D<<<grid, block>>>(this->d_data, tensor->d_data, tensor_o->d_data, bz, M, N, K); CHECK_KERNEL();
 
     return tensor_o;
+}
+
+/* (B x M x N) @ (B x N x K) = (B x M x K) */
+void Tensor::bmm(Tensor*& output, Tensor* tensor) {
+    size_t d1 = this->getDim(), d2 = tensor->getDim();
+    bool ge = d1 >= d2;
+    size_t dim = ge ? d1 : d2;
+
+    size_t bz = this->shape[0];
+    size_t M = this->shape[1], N = this->shape[2], K = tensor->shape[2];
+    DimVector shape_o = {bz, M, K};
+
+    if (output == nullptr) {
+        output = new Tensor(shape_o); 
+        DEBUG_PRINT("output is newly alloced\n");
+    }
+    output->reset(shape_o);
+
+    if(dim != 3 || tensor->shape[0] != bz || this->shape[2] != tensor->shape[1])  ERROR("bmm shape not matched!\n");
+
+    dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
+    dim3 grid((K-1)/BLOCK_SIZE2D +1, (M-1)/BLOCK_SIZE2D+1);
+
+    kBatchMatmul3D<<<grid, block>>>(this->d_data, tensor->d_data, output->d_data, bz, M, N, K); CHECK_KERNEL();
 }
 
 

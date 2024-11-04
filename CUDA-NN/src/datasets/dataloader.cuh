@@ -20,20 +20,27 @@ class DataLoader {
 
         size_t cropping_size;
         size_t channel;
+        cudaStream_t stream;
 
         std::vector<std::vector<float>> data;
         std::vector<int> labels;
 
+        float* prefetched_data = nullptr;
+        float* prefetched_mask = nullptr;
+        float* pinned_data = nullptr;
+
     public:
-        DataLoader(std::vector<std::vector<float>>& data, std::vector<int>& labels, size_t batchsize=1, size_t cropping_size=20000, bool shuffle=false, size_t num_workers=0, bool pin_memory=false, bool drop_last=false);
+        DataLoader(std::vector<std::vector<float>>& data, std::vector<int>& labels, size_t batchsize=1, size_t cropping_size=30000, bool shuffle=false, size_t num_workers=0, bool pin_memory=false, bool drop_last=false);
+        ~DataLoader();
 
-        Tensor* getBatchedData(std::vector<int>& labels);
+        void getBatchedData(Tensor* &batched_input, Tensor*& batched_mask, std::vector<int>& labels);
 
-        size_t getDataNum();
+        size_t getSize();
 
         size_t getBatchNum();
     private:
         std::vector<float> crop(std::vector<float>& points);
+        void loadNextBatchAsync();
 };
 
 #endif /* !DATALOADER_H */

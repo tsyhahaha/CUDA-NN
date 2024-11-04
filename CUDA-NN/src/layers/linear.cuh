@@ -26,8 +26,8 @@ class Linear: public BaseLayer {
         // Tensor* outputBackward=nullptr;
 
     public:
-        Linear(std::string prefix, size_t in_features, size_t out_features, bool bias=true, InitType init_type=KAIMING);
-        Linear(size_t in_features, size_t out_features, bool bias=true, InitType init_type=KAIMING);
+        Linear(std::string prefix, size_t in_features, size_t out_features, bool bias=true, InitType init_type=RANDOM);
+        Linear(size_t in_features, size_t out_features, bool bias=true, InitType init_type=RANDOM);
 
         Tensor* forward(Tensor* data);
         Tensor* backward(Tensor* gradients);

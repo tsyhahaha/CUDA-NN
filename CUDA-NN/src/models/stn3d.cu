@@ -17,6 +17,12 @@ STN3d::STN3d(std::string prefix, size_t channel) {
     this->bn3 = new BatchNorm1d(this->prefix + "bn3.", 1024, true);
     this->bn4 = new BatchNorm1d(this->prefix + "bn4.", 512, true);
     this->bn5 = new BatchNorm1d(this->prefix + "bn5.", 256, true);
+
+    this->iden = new Tensor({3,3}, IDENTITY);
+    this->iden->flatten();
+
+    this->o = new Tensor({Configurer::batch_size, 1024});
+    this->output = new Tensor({Configurer::batch_size, 9});
 }
 
 STN3d::~STN3d() {
@@ -32,6 +38,10 @@ STN3d::~STN3d() {
     delete bn3;
     delete bn4;
     delete bn5;
+    
+    delete iden;
+    if(o != nullptr) delete o;
+    if(output != nullptr) delete output;
 }
 
 void STN3d::load_weights() {
@@ -55,22 +65,28 @@ Tensor* STN3d::forward(Tensor* data, Tensor* mask) {
     Tensor* x = bn1->forward(conv1->forward(data));
     x = bn2->forward(conv2->forward(x));
     x = bn3->forward(conv3->forward(x));
+    if(mask->getSize() > 0) { 
+        x->mask_fill_(mask, 2, FP32_MIN);
+    }
+    
+    x->max(o, 2, false);    // the output of max saved to tensor o;
 
-    x->max_(2, false);
-
-    x = bn4->forward(fc1->forward(x));
+    x = bn4->forward(fc1->forward(o));
     x = bn5->forward(fc2->forward(x));
     x = fc3->forward(x);
+    
+    // if(output != nullptr) {
+    //     output->setShape({bz, 9});
+    // } else output = new Tensor({bz, 9});
+    // output->copyFrom(x);
 
-    Tensor* iden = new Tensor({3,3}, IDENTITY);
-    iden->flatten();
+    // output->add_(iden);
+    // output->reshape({bz, 3, 3});
 
-    Tensor* o = x->add(iden);
-    o->reshape({bz, 3, 3});
+    x->add_(iden);
+    x->reshape({bz, 3, 3});
 
-    delete iden;
-
-    return o;
+    return x;
 }
 
 Tensor* STN3d::backward(Tensor* gradients) {

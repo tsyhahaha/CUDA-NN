@@ -19,6 +19,10 @@ Encoder::Encoder(std::string prefix, bool global_feat, bool feature_transform, s
     if(feature_transform) {
         fstn = new STNkd(this->prefix + "fstn.", 64);
     }
+
+    this->p_trans = new Tensor({Configurer::batch_size, Configurer::cropping_size, channel});
+    this->f_trans = new Tensor({Configurer::batch_size, Configurer::cropping_size, 64});
+    this->output = new Tensor({Configurer::batch_size, 1024});
 }
 
 Encoder::~Encoder() {
@@ -30,6 +34,10 @@ Encoder::~Encoder() {
     delete bn2;
     delete bn3;
     delete relu;
+
+    if(p_trans != nullptr) delete p_trans;
+    if(f_trans != nullptr) delete f_trans;
+    if(output != nullptr) delete output;
 }
 
 void Encoder::load_weights() {
@@ -53,40 +61,38 @@ Tensor* Encoder::forward(Tensor* data, Tensor* mask) {
     data->transpose(2, 1);
     assert(D == 3);
 
-    Tensor* o = data->bmm(trans);   // (N L C) @ (N C C)
+    // Tensor* o = data->bmm(trans);   // (N L C) @ (N C C)
     
-    o->transpose(2, 1);
-    Tensor* x = bn1->forward(conv1->forward(o));
+    data->bmm(p_trans, trans);
+    p_trans->transpose(2, 1);
+
+    Tensor* x = bn1->forward(conv1->forward(p_trans));
 
     Tensor* trans_feat;
-    Tensor* f_trans;
 
     if(this->feature_transform) {
         trans_feat = fstn->forward(x, mask);
         x->transpose(2, 1);
-        f_trans = x->bmm(trans_feat);    // track f_trans
+        x->bmm(f_trans, trans_feat);    // track f_trans
+        f_trans->transpose(2, 1);
         x = f_trans;
-        x->transpose(2, 1);
     }
 
     x = bn2->forward(conv2->forward(x));
     x = bn3->forward(conv3->forward(x));    // the output has been changed, attention when impl training
-    x->max_(2, false);
+    if(mask->getSize() > 0) {
+        x->mask_fill_(mask, 2, FP32_MIN);
+    }
+
+    x->max(output, 2, false);   // saved to the output
 
     /*
     if self.global_feat:
         return x, trans, trans_feat
     */
 
-    // clean up
-    delete o, trans;
     if(this->global_feat) {
-        delete trans_feat;
-        delete f_trans;
-    }
-
-    if(this->global_feat) {
-        return x;
+        return output;
     }
     ERROR("Not implemented!\n");
     return nullptr;    

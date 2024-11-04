@@ -14,6 +14,9 @@
 /* unary op */
 
 __global__
+void kMaskFillLast3D(float* d_data, float* mask, float value, int N, int C, int L);
+
+__global__
 void kSumLastDim2D(float* d_data, float* d_out, size_t C, size_t L
 );
 

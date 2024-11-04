@@ -145,56 +145,41 @@ int main(int argc, char *argv[]) {
     Configurer::set_global_weights(params);
     PointNet* pointnet = new PointNet();
     pointnet->load_weights();
+    pointnet->eval();
 
     std::string file_path = "/home/tsyhahaha/CUDA-NN/data/splits/test_point_clouds.h5";
     std::vector<std::vector<float>> list_of_points;
     std::vector<int> list_of_labels;
     // 读取训练集数据
     read_h5_file(file_path, list_of_points, list_of_labels);
+    size_t batch_size = Configurer::batch_size;
+    size_t cropping_size = Configurer::cropping_size;
+    bool pin_memory = false;
 
-    DataLoader* dataloader = new DataLoader(list_of_points, list_of_labels, 1, 30000, false);
+    DataLoader* dataloader = new DataLoader(list_of_points, list_of_labels, batch_size, cropping_size, false, 0, pin_memory, false);
+
+    std::vector<int> labels(batch_size);
+    Tensor* input = new Tensor({batch_size, cropping_size, 3});
+    Tensor* mask = new Tensor({batch_size});
+    Tensor* pred = new Tensor({batch_size});
 
     // 开始计时，使用chrono计时，不支持其它计时方式
     auto start = std::chrono::high_resolution_clock::now();
 
-    // for (size_t i = 0; i < list_of_points.size(); i++) {
-    //     Tensor* input = new Tensor({1, list_of_points[i].size()/3, 3});
-    //     input->fromVec(list_of_points[i]);
-    //     input->transpose(-2, -1);
-
-    //     Tensor* output = pointnet->forward(input);
-
-    //     Tensor* pred = output->argmax(-1);
-    //     float* pred_labels = pred->toHost();
-
-    //     printf("%f ", pred_labels[0]);
-        
-    //     std::cout << list_of_labels[i]  << std::endl;
-
-    //     if((int)pred_labels[0] == list_of_labels[i]) {
-    //         right_num += 1;
-    //     }
-    //     delete input, output, pred;
-    // }
-
     unsigned int right_num = 0;
     unsigned int data_sum = list_of_points.size();
     unsigned int batch_num = dataloader->getBatchNum();
-
-    
-
-    Tensor* input = nullptr;
-    Tensor* pred = nullptr;
-    
-    for (size_t i = 0; i < data_sum; i++) {
-        std::vector<int> labels;
-
-        input = dataloader->getBatchedData(labels);
+   
+    for (size_t i = 0; i < batch_num; i++) {
+        
+        dataloader->getBatchedData(input, mask, labels);
 
         input->transpose(-2, -1);
-        Tensor* output = pointnet->forward(input);
 
-        pred = output->argmax(-1);
+        Tensor* output = pointnet->forward(input, mask);
+
+        output->argmax(pred, -1);
+
         pred->squeeze();
 
         float* pred_labels = pred->toHost();
@@ -203,8 +188,6 @@ int main(int argc, char *argv[]) {
             if(labels[j] == (int)(pred_labels[j] + 0.5)) right_num++;
         }
         // clean up
-        delete input, pred;
-        input = nullptr; pred = nullptr;
         free(pred_labels); 
 
         auto end = std::chrono::high_resolution_clock::now();
@@ -224,6 +207,8 @@ int main(int argc, char *argv[]) {
 
     // clean up
     delete pointnet;
+    delete input, pred;
+    delete dataloader;
 
     return 0;
 }

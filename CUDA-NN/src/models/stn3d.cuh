@@ -1,12 +1,18 @@
 #ifndef STN3D_H
 #define STN3D_H
 
+#include "configure.cuh"
 #include "tensor.cuh"
 #include "layers.cuh"
 #include "base.cuh"
 
 /* Maybe it can be acquired by STNkd...... */
 class STN3d: public BaseModel {
+    private:
+        Tensor* iden;
+        Tensor* o = nullptr;
+        Tensor* output=nullptr;
+
     public:
         Conv1d* conv1;
         Conv1d* conv2;

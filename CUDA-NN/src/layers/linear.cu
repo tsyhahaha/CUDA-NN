@@ -256,8 +256,7 @@ Linear::Linear(std::string prefix, size_t in_features, size_t out_features, bool
 
     DimVector weights_shape = {out_features, in_features};
     this->weights = new Tensor(weights_shape);
-
-    this->weights->initialize(init_type);
+    this->weights->initialize(is_training ? init_type : NONE);
 
     this->prefix = prefix;
     
@@ -283,9 +282,16 @@ Linear::Linear(size_t in_features, size_t out_features, bool bias, InitType init
 }
 
 Tensor* Linear::forward(Tensor* data) {
-    // data(B x N) @ weightss(M x N).T + bias(M) = output(B x M)
+    // data(B x N) @ weights(M x N).T + bias(M) = output(B x M)
     // reinitializations
-    this->reset();
+    size_t bz = data->getShape()[0];
+    DimVector shape_o = {bz, out_features};
+
+    if(output==nullptr) {
+        this->output = new Tensor({bz, out_features});
+    }
+    this->output->reset(shape_o);
+
     if(this->is_training)
         this->input = data;
     
@@ -296,10 +302,6 @@ Tensor* Linear::forward(Tensor* data) {
         }
         ERROR("Not implemented!\n");
     }
-
-    size_t bz = data->getShape()[0];
-
-    this->output = new Tensor({bz, out_features});
 
     dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
     dim3 grid((out_features - 1)/(BLOCK_SIZE2D)+1, (bz-1)/(BLOCK_SIZE2D)+1);
@@ -314,6 +316,7 @@ Tensor* Linear::forward(Tensor* data) {
 
     if(this->output->getShape()[0] != data->getShape()[0] ||  \
             this->output->getShape()[1] != weights->getShape()[0]) {
+                printShape(data->getShape());
                 printShape(this->output->getShape());
                 ERROR("shape not matched!\n");
             }

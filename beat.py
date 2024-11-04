@@ -40,7 +40,7 @@ def gen(cfg):
     print(f"Generate test points for {cfg['name'].upper()}")
     for i in tqdm(range(num)):
         shape = ()
-        B, L = 4, 19000
+        B, L = 4, 20000
         if cfg['target'] == 'model':
             if cfg['name'] in ["pointnet", 'stn3d', 'encoder']:
                 shape = (B, 3, L)
@@ -58,12 +58,13 @@ def gen(cfg):
             else:
                 raise ValueError(f"cfg[{cfg['name']}] not implemented!")
         elif cfg['target'] == 'op':
+            channel = random.randint(3, 64)
             if cfg['name'] == 'max':
-                channel = random.randint(3, 64)
                 shape = (B, channel, L)
-            if cfg['name'] == 'argmax':
-                channel = random.randint(3, 64)
+            elif cfg['name'] == 'argmax':
                 shape = (B, L)
+            elif cfg['name'] == 'transpose':
+                shape = (B, channel, L)
         data_point = np.random.rand(*shape)
         np.savetxt(os.path.join(save_dir, f'{i+1}.txt'), data_point.flatten())
         np.savetxt(os.path.join(save_dir, f'{i+1}.shape.txt'), np.array(shape).flatten(), fmt="%d")
@@ -96,12 +97,14 @@ def test_py(cfg):
     os.makedirs(pyout_dir, exist_ok=True)
     clear_directory(pyout_dir)
 
-    # if test operation
+    # test_op
     if cfg['target'] == 'op':
         if cfg['name'] == 'max':
             net = lambda x: torch.max(x, -1, keepdim=False)[0]
-        if cfg['name'] == 'argmax':
+        elif cfg['name'] == 'argmax':
             net = lambda x: torch.argmax(x, -1, keepdim=False)
+        elif cfg['name'] == 'transpose':
+            net = lambda x: torch.transpose(x, -2, -1)
     elif cfg['target'] == 'model':
     # if test the model
         net = PointNet()
@@ -163,7 +166,7 @@ def test_py(cfg):
         time_end = time.time()
         time_sum += time_end - time_start
         np.savetxt(out_file, output.detach().cpu().numpy().flatten(), fmt='%.06f')
-    print("Average time cost: ", round(time_sum/len(files), 4),'s')
+    # print("Average time cost: ", round(time_sum/len(files), 4),'s')
     print("-"*50)
 
 def test_cu(cfg):
@@ -182,11 +185,11 @@ def test_cu(cfg):
         print("[ERROR] Failed to launch the cuda program!")
         exit(-1)
     
-    pattern = r'Average time consumed:\s*([0-9]*\.[0-9]+) s'
-    content = result.stdout
-    matches = re.findall(pattern, content)
-    for match in matches:
-        print(f'Extracted average time: {match}')
+    # pattern = r'Average time consumed:\s*([0-9]*\.[0-9]+) s'
+    # content = result.stdout
+    # matches = re.findall(pattern, content)
+    # for match in matches:
+    #     print(f'Extracted average time: {match}')
     os.chdir(cur)
     print("-"*50)
 

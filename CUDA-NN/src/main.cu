@@ -29,7 +29,14 @@ using LayerParams = std::map<std::string, std::map<std::string, std::string>>;  
 
 int data_num;
 
-// 解析 YAML 文件
+#include <fstream>
+#include <string>
+#include <utility>
+#include <map>
+
+using ConfigMap = std::map<std::string, std::string>;
+using LayerParams = std::map<std::string, std::map<std::string, std::string>>;
+
 std::pair<ConfigMap, LayerParams> loadYamlConfig(const std::string& filename) {
     std::ifstream file(filename);
     ConfigMap config;
@@ -44,9 +51,15 @@ std::pair<ConfigMap, LayerParams> loadYamlConfig(const std::string& filename) {
         line.erase(0, line.find_first_not_of(" \t"));
         line.erase(line.find_last_not_of(" \t") + 1);
 
-        // 跳过空行或注释
-        if (line.empty() || line[0] == '#') {
+        // 跳过空行
+        if (line.empty()) {
             continue;
+        }
+
+        // 查找行内注释并忽略注释部分
+        std::size_t comment_pos = line.find('#');
+        if (comment_pos != std::string::npos) {
+            line = line.substr(0, comment_pos); // 截取注释前的部分
         }
 
         // 查找键值对的冒号
@@ -61,7 +74,7 @@ std::pair<ConfigMap, LayerParams> loadYamlConfig(const std::string& filename) {
             value.erase(0, value.find_first_not_of(" \t\""));
             value.erase(value.find_last_not_of(" \t\"") + 1);
 
-            if(value == "") {
+            if (value == "") {
                 inside_layer = false;
             }
 
@@ -83,9 +96,9 @@ std::pair<ConfigMap, LayerParams> loadYamlConfig(const std::string& filename) {
             inside_layer = false;
         }
     }
-
     return {config, layers};
 }
+
 
 
 void printConfig(const ConfigMap& config, const std::map<std::string, std::string>& layer_params) {
@@ -277,7 +290,12 @@ void test_module(
             auto start = std::chrono::high_resolution_clock::now();
             //////////////////////////////////////
             // forward process                  //
-            Tensor* output = nn->forward(input);//
+            Tensor* output;
+            if(target=="model") {
+                output = static_cast<BaseModel*>(nn)->forward(input, {});
+            } else if(target=="layer") {
+                output = static_cast<BaseLayer*>(nn)->forward(input);
+            }
             //////////////////////////////////////
             auto end = std::chrono::high_resolution_clock::now();std::vector<float> output_vec;
             if (target == "model" && name == "pointnet" && cfg["argmax"] == "true") {
@@ -333,11 +351,15 @@ void test_op(
                 Tensor* output = input->argmax(-1, false);
                 output_vec = output->toVec();
                 delete output;
+            } else if(name == "transpose") {
+                input->transpose(-1, -2);
+                output_vec = input->toVec();
             } else {
                 ERROR("Not implemented op %s!\n", name.c_str());
             }
             auto end = std::chrono::high_resolution_clock::now();
 
+            delete input;
             // log time
             std::chrono::duration<double> diff = end - start;
             count_sum += diff.count();

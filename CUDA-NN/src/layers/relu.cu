@@ -44,13 +44,17 @@ ReLU::ReLU(std::string prefix, bool inplace) {
 }
 
 Tensor* ReLU::forward(Tensor* data) {
-    this->reset();
+    DimVector shape_o = data->getShape();
+    if(this->output == nullptr) {
+        this->output = new Tensor(shape_o);
+    }
+    this->output->reset(shape_o);
+
     if(this->is_training)
         this->input = data;
 
-    DimVector shape_o = data->getShape(); // deep copy auto?
     int dim = shape_o.size();
-    size_t n_data = data->getDataNum();
+    size_t n_data = data->getSize();
 
     int block = BLOCK_SIZE1D;
     int grid = (n_data - 1) / block + 1;
@@ -59,9 +63,7 @@ Tensor* ReLU::forward(Tensor* data) {
         kReLU1D<<<grid, block>>>(data->getData(), data->getData(), n_data); CHECK_KERNEL();
         this->output = data;
     } else {
-        Tensor* tensor_o = new Tensor(shape_o);
-        kReLU1D<<<grid, block>>>(data->getData(), tensor_o->getData(), n_data);CHECK_KERNEL();
-        this->output = tensor_o;
+        kReLU1D<<<grid, block>>>(data->getData(), this->output->getData(), n_data);CHECK_KERNEL();
     }
 
     return this->output;

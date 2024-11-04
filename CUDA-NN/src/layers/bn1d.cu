@@ -109,16 +109,16 @@ void BatchNorm1d::load_weights(std::vector<float>& params, const std::string& ta
     size_t n_data = params.size();
     float* h_data = params.data();
     if(target=="weights") {
-        assert(n_data == this->weights->getDataNum());
+        assert(n_data == this->weights->getSize());
         this->weights->load(h_data, n_data);
     } else if(target == "bias") {
-        assert(n_data == this->bias->getDataNum());
+        assert(n_data == this->bias->getSize());
         this->bias->load(h_data, n_data);
     } else if(target == "mean") {
-        assert(this->running_mean->getDataNum() == n_data);
+        assert(this->running_mean->getSize() == n_data);
         this->running_mean->load(h_data, n_data);
     } else if(target == "var") {
-        assert(this->running_var->getDataNum() == n_data);
+        assert(this->running_var->getSize() == n_data);
         this->running_var->load(h_data, n_data);
     } else {
         ERROR("Load weights %s error!\n", target.c_str());
@@ -130,7 +130,13 @@ Tensor* BatchNorm1d::forward(Tensor* data) {
         // Dependency: Tensor.mean(size_t dim);
         ERROR("not implemented!");
     }
-    this->reset();
+    DimVector shape_o = data->getShape();
+
+    if(this->output == nullptr) {
+        this->output = new Tensor(shape_o);
+    }
+    this->output->reset(shape_o);
+
     if(this->is_training) {
         this->input = data;
     }
@@ -139,7 +145,9 @@ Tensor* BatchNorm1d::forward(Tensor* data) {
     if(dim == 2) {
         DimVector shape = data->getShape();
         int N = shape[0], C = shape[1];
-        this->output = new Tensor(shape);
+
+        if(output==nullptr)
+            this->output = new Tensor(shape);
 
         dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
         dim3 grid((C-1)/BLOCK_SIZE2D + 1, (N-1)/BLOCK_SIZE2D+1); 
@@ -148,7 +156,9 @@ Tensor* BatchNorm1d::forward(Tensor* data) {
     } else if(dim == 3) {
         DimVector shape = data->getShape();
         int N = shape[0], C = shape[1], L = shape[2];
-        this->output = new Tensor(shape);
+
+        if(output==nullptr)
+            this->output = new Tensor(shape);
 
         dim3 block(BLOCK_SIZE3D, BLOCK_SIZE3D, BATCH_BASE);
         dim3 grid((L-1)/BLOCK_SIZE3D + 1, (C-1)/BLOCK_SIZE3D+1, (N-1)/BATCH_BASE+1); 

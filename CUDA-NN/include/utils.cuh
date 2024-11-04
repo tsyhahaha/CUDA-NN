@@ -6,6 +6,8 @@
 #include<iostream>
 #include<vector>
 
+#define FP32_MIN -1e7f
+
 #define DEBUG 0
 
 #if defined(DEBUG) && DEBUG >= 1

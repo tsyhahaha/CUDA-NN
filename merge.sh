@@ -37,8 +37,7 @@ should_add_line() {
     # 跳过双引号 include 语句
     elif [[ $line =~ \#include[[:space:]]*\".*\" ]]; then
         return 1
-    # 跳过防护符定义，例如 #define KERNEL_H
-    elif [[ $line == \#define\ * && $line != *[\(\)\[\]\{\}\\=]* && ! $line =~ \#define\ [a-zA-Z_][a-zA-Z0-9_]*\ [0-9]+ ]]; then
+    elif [[ $line == \#define\ * && $line != *[\(\)\[\]\{\}\\=]* && ! $line =~ \#define\ [a-zA-Z_][a-zA-Z0-9_]*\ [-+]?[0-9]*\.?[0-9]*([eE][-+]?[0-9]+)? ]]; then
         return 1
     elif [[ $line == \#ifndef\ * && $line != *[\(\)\[\]\{\}\\=]* && ! $line =~ \#define\ [a-zA-Z_][a-zA-Z0-9_]*\ [0-9]+ ]]; then
         return 1

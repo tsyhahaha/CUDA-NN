@@ -43,7 +43,7 @@ Tensor* Dropout::forward(Tensor* data) {
 
     DimVector shape_o = data->getShape(); 
     int dim = shape_o.size();
-    size_t n_data = data->getDataNum();
+    size_t n_data = data->getSize();
 
     int block = BLOCK_SIZE1D;
     int grid = (n_data - 1) / block + 1;

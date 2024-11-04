@@ -77,7 +77,13 @@ SoftMax::SoftMax(size_t dim, bool apply_log) {
 }
 
 Tensor* SoftMax::forward(Tensor* data) {
-    this->reset();
+
+    DimVector shape_o = data->getShape();
+    if(this->output == nullptr) {
+        this->output = new Tensor(shape_o);
+    }
+    this->output->reset(shape_o);    
+    
     if(this->is_training)
         this->input = data;
     //////////////////////////////////////
@@ -94,13 +100,15 @@ Tensor* SoftMax::forward(Tensor* data) {
     }
 
     size_t L = data->getShape()[1], C = data->getShape()[0];
-    Tensor* tensor_o = new Tensor({C, L});
+
+    if(this->output == nullptr) {
+        this->output = new Tensor({C, L});
+    }
 
     int block = BLOCK_SIZE1D;
     int grid = C;
-    kSoftmax<<<grid, block>>>(data->getData(), tensor_o->getData(), C, L, this->apply_log); CHECK_KERNEL();
+    kSoftmax<<<grid, block>>>(data->getData(), this->output->getData(), C, L, this->apply_log); CHECK_KERNEL();
 
-    this->output = tensor_o;
     return this->output;
 }
 

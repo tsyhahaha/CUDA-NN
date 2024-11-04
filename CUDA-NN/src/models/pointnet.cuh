@@ -8,7 +8,7 @@
 #include "layers.cuh"
 #include "encoder.cuh"
 
-class PointNet: public Module {
+class PointNet: public BaseModel {
     public:
         Encoder* feat;
         Linear* fc1;
@@ -27,7 +27,7 @@ class PointNet: public Module {
 
         void load_weights();
 
-        Tensor* forward(Tensor* data, Tensor* mask=nullptr);
+        Tensor* forward(Tensor* data, Tensor* mask);
         Tensor* backward(Tensor* gradients);
 };
 

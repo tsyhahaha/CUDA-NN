@@ -187,6 +187,8 @@ void kBatchMatmul3D(
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
+    if(row >= M || col >= K) return;
+
     __shared__ float ds_A[BLOCK_SIZE2D][TILE_SIZE];
     __shared__ float ds_B[TILE_SIZE][BLOCK_SIZE2D];
 

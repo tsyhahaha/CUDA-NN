@@ -8,6 +8,10 @@
 class STNkd: public BaseModel {
     private:
         size_t k;
+
+        Tensor* iden;
+        Tensor* o = nullptr;
+        Tensor* output = nullptr;
         
     public:
         Conv1d* conv1;
@@ -29,7 +33,7 @@ class STNkd: public BaseModel {
 
         void load_weights();
 
-        Tensor* forward(Tensor* data, Tensor* mask=nullptr);
+        Tensor* forward(Tensor* data, Tensor* mask);
         Tensor* backward(Tensor* gradients);
 };
 
