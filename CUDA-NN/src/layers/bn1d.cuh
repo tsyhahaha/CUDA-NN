@@ -20,15 +20,23 @@ class BatchNorm1d: public BaseLayer {
         bool track_running_stats;
         bool relu;
         
-        
-        Tensor* running_mean;   // the mean per channel(C)
-        Tensor* running_var;    // the var  per channel(C)
+        Tensor* running_mean = nullptr;   // the mean per channel(C)
+        Tensor* running_var = nullptr;    // the var  per channel(C)
+        Tensor* mean_cache = nullptr;     // forward update
+        Tensor* var_cache = nullptr;      // forward update
+
+        // backward cache
+        Tensor* x_minus_mu = nullptr;
+        Tensor* sqrt_var_inv = nullptr;
+        Tensor* x_hat = nullptr;
+        Tensor* d_mean = nullptr;
+        Tensor* d_var = nullptr;
+        Tensor* d_x_hat = nullptr;
         // Tensor* weights;     // affine gamma (C)
         // Tensor* bias;        // affine beta  (C)
 
         // Tensor* input=nullptr;      // (N, C) or (N, C, L)
         // Tensor* output=nullptr;     // (N, C) or (N, C, L)
-        // Tensor* outputBackward=nullptr;
 
     public:
         BatchNorm1d(std::string prefix, size_t num_features, bool relu=false, float eps = 1e-5, float monmentum=0.1, bool affine=true, bool track_running_stats=true);
@@ -38,12 +46,15 @@ class BatchNorm1d: public BaseLayer {
         void load_weights(std::vector<float>& params, const std::string& target);
 
         void load_weights();
+        void init_weights();
 
         Tensor* forward(Tensor* data);
         Tensor* backward(Tensor* gradients);
-
+        BatchNorm1d* train();
+    
     private:
-        
+        void prepare_backward();
+
 };
 
 

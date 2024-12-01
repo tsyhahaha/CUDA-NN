@@ -26,10 +26,6 @@ void kReLU2D(float* A, float* d_out, int M, int N) {
 ReLU::ReLU(bool inplace) {
     this->inplace = inplace;
     this->input = nullptr;
-
-    // Prepare output for forward and backprop
-    this->output = nullptr;
-    this->outputBackward = nullptr;
 }
 
 ReLU::ReLU(std::string prefix, bool inplace) {
@@ -37,10 +33,6 @@ ReLU::ReLU(std::string prefix, bool inplace) {
     this->input = nullptr;
 
     this->prefix = prefix;
-
-    // Prepare output for forward and backprop
-    this->output = nullptr;
-    this->outputBackward = nullptr;
 }
 
 Tensor* ReLU::forward(Tensor* data) {

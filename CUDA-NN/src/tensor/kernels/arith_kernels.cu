@@ -68,14 +68,13 @@ void kAddStride_l3(
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int z = blockIdx.z * blockDim.z + threadIdx.z;
 
-    if (z >= B || y >= M || x >= N) return;
-
-    int N1 = s13 == 1 ? N : 1;
-    int N2 = s23 == 1 ? N : 1;
     int M1 = s12 == 1 ? M : 1;
+    int N1 = s13 == 1 ? N : 1;
     int M2 = s22 == 1 ? M : 1;
+    int N2 = s23 == 1 ? N : 1;
 
-    d_out[z*(M*N) + y*N + x] = f1 * d_A[z/s11 * (M1 * N1) + y/s12 * N1 + x/s13] + f2 * d_B[z/s21*(M2 * N2) + y/s22 * N2 + x/s23];
+    if(z < B && y < M && x < N)
+        d_out[z*(M*N) + y*N + x] = f1 * d_A[z/s11 * (M1 * N1) + y/s12 * N1 + x/s13] + f2 * d_B[z/s21*(M2 * N2) + y/s22 * N2 + x/s23];
 }
 
 /* dot mul */

@@ -22,14 +22,16 @@ class Conv1d: public BaseLayer {
 
         // Tensor* input=nullptr;      // (N, C_in, L_in) or (C_in, L_in)
         // Tensor* output=nullptr;     // (N, C_out, L_in) or (C_out, L_in) if ks = 1
-        // Tensor* outputBackward=nullptr;
 
     public:
         Conv1d(std::string prefix, size_t in_channels, size_t out_channels, size_t kernel_size, bool bias = true);
         Conv1d(size_t in_channels, size_t out_channels, size_t kernel_size, bool bias = true);
 
+        void init_weights();
+
         Tensor* forward(Tensor* data);
         Tensor* backward(Tensor* gradients);
+        Conv1d* train();
 };
 
  

@@ -2,6 +2,7 @@
 #define ENCODER_H
 
 #include "base.cuh"
+#include "kernels.cuh"
 #include "tensor.cuh"
 #include "layers.cuh"
 #include "stn3d.cuh"
@@ -12,9 +13,20 @@ class Encoder: public BaseModel {
         bool global_feat;
         bool feature_transform;
         size_t channel;
-        Tensor* p_trans = nullptr;
+        Tensor* feat;
+        Tensor* trans_points = nullptr;
         Tensor* f_trans = nullptr;
+        Tensor* p_trans = nullptr;
+        Tensor* trans_feat = nullptr;
         Tensor* output = nullptr;
+
+        Tensor* max_index = nullptr;
+        Tensor* max_gradients = nullptr;
+
+        Tensor* f_gradients = nullptr;
+        Tensor* p_gradients = nullptr;
+        Tensor* trans_feat_gradients = nullptr;
+        Tensor* trans_points_gradients = nullptr;
 
     public:
         STN3d* stn;
@@ -32,9 +44,13 @@ class Encoder: public BaseModel {
         ~Encoder();
 
         void load_weights();
+        void init_weights();
+        Encoder* train();
+        Encoder* eval();
 
         Tensor* forward(Tensor* data, Tensor* mask);
         Tensor* backward(Tensor* gradients);
+        void name_params(std::map<std::string, Tensor*>& np);
 };
 
 #endif /* !ENCODER_H */

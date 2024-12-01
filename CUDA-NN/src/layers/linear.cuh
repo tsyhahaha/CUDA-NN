@@ -18,20 +18,14 @@ class Linear: public BaseLayer {
         size_t in_features;
         size_t out_features; 
 
-        // Tensor* weights; // (out_features, in_features)
-        // Tensor* bias;   // (out_features)
-        
-        // Tensor* input=nullptr;      // (*, in_features)
-        // Tensor* output=nullptr;     // (*, out_features)
-        // Tensor* outputBackward=nullptr;
-
     public:
-        Linear(std::string prefix, size_t in_features, size_t out_features, bool bias=true, InitType init_type=RANDOM);
-        Linear(size_t in_features, size_t out_features, bool bias=true, InitType init_type=RANDOM);
+        Linear(std::string prefix, size_t in_features, size_t out_features, bool bias=true);
+        Linear(size_t in_features, size_t out_features, bool bias=true);
 
+        void init_weights();
+        Linear* train();
         Tensor* forward(Tensor* data);
         Tensor* backward(Tensor* gradients);
-
 };
 
 #endif /* !LINEAR_H */

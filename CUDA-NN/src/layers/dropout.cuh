@@ -2,16 +2,14 @@
 #ifndef DROPOUT_H
 #define DROPOUT_H
 
-#include "tensor.cuh"
+#include <cuda_runtime.h>
+#include <curand_kernel.h>
 #include "base.cuh"
 
-/* 
-https://pytorch.org/docs/stable/generated/torch.nn.ReLU.html 
-torch.nn.ReLU(inplace=False)
-*/
 class Dropout: public BaseLayer {
     private:
         float p;
+        Tensor* mask;
         bool inplace;   // If true, input from this layer cannot be reused.
         
         // Tensor* input=nullptr;

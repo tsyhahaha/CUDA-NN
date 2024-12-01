@@ -16,6 +16,7 @@ class SoftMax: public BaseLayer {
 
         Tensor* forward(Tensor* data);
         Tensor* backward(Tensor* gradients); 
+        SoftMax* train();
 
 };
 

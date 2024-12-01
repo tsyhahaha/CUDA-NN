@@ -13,9 +13,11 @@ BaseLayer::~BaseLayer(){
     if(output != nullptr) {
         delete output;
     }
-    if(outputBackward != nullptr) {
-        delete outputBackward;
+    if(d_out != nullptr) {
+        delete d_out;
     }
+    if(d_weights != nullptr) delete d_weights;
+    if(d_bias != nullptr) delete d_bias;
 }
 
 Tensor* BaseLayer::getWeights() {
@@ -28,7 +30,16 @@ Tensor* BaseLayer::getBias() {
 
 void BaseLayer::load_weights() {
     this->weights->fromVec(Configurer::getWeights(this->prefix + "weight"));
-    this->bias->fromVec(Configurer::getWeights(this->prefix + "bias"));
+    if(bias) {
+        this->bias->fromVec(Configurer::getWeights(this->prefix + "bias"));
+    }
+}
+
+void BaseLayer::init_weights() {
+    this->weights->initialize(is_training ? RANDOM:NONE);
+    if(bias) {
+        this->bias->initialize(is_training ? RANDOM:NONE);
+    }
 }
 
 void BaseLayer::load_weights(float *h_data, size_t n_data, const std::string& target) {
@@ -68,6 +79,13 @@ void BaseLayer::load_weights(std::vector<float>& params, const std::string& targ
     }
 }
 
+void BaseLayer::name_params(std::map<std::string, Tensor*>& np) {
+    if(this->weights)
+        np.insert(std::make_pair(prefix + "weights", weights));
+    if(this->bias)
+        np.insert(std::make_pair(prefix + "bias", bias));
+}
+
 void BaseLayer::reset(){
     if(this->output != nullptr) {
         delete this->output;
@@ -76,12 +94,18 @@ void BaseLayer::reset(){
     }
 }
 
+void BaseLayer::train() {
+    this->is_training = true;
+    if(weights)
+        this->weights->train();
+    if(bias)
+        this->bias->train();
+}
 
-
-// Tensor* Layer::getDeltaweightss() {
-//     return this->deltaweightss;
-// }
-
-// Tensor* Layer::getDeltaBias() {
-//     return this->deltaBias;
-// }
+void BaseLayer::eval(){
+    this->is_training = false;
+    if(weights)
+        this->weights->eval();
+    if(bias)
+        this->bias->eval();
+}

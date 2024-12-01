@@ -37,6 +37,8 @@ int data_num;
 using ConfigMap = std::map<std::string, std::string>;
 using LayerParams = std::map<std::string, std::map<std::string, std::string>>;
 
+bool is_training = true;
+
 std::pair<ConfigMap, LayerParams> loadYamlConfig(const std::string& filename) {
     std::ifstream file(filename);
     ConfigMap config;
@@ -102,14 +104,14 @@ std::pair<ConfigMap, LayerParams> loadYamlConfig(const std::string& filename) {
 
 
 void printConfig(const ConfigMap& config, const std::map<std::string, std::string>& layer_params) {
-    std::cout << "General Config:\n\n";
+    std::cout << "General Config:\n";
     for (ConfigMap::const_iterator it = config.begin(); it != config.end(); ++it) {
-        std::cout << it->first << ": " << it->second << '\n';
+        std::cout << " - " << it->first << ": " << it->second << '\n';
     }
 
-    std::cout << "\nLayer Params:\n\n";
+    std::cout << "\nLayer Params:\n";
     for (std::map<std::string, std::string>::const_iterator it = layer_params.begin(); it != layer_params.end(); ++it) {
-        std::cout << it->first << ": " << it->second << '\n';
+        std::cout << " - " <<  it->first << ": " << it->second << '\n';
     }
 }
 
@@ -228,6 +230,11 @@ Module* getModel(const std::string& target, const std::string& name, std::map<st
         } else if(name == "stnkd") {
             nn = static_cast<PointNet*>(nn)->feat->fstn;
         }
+        if(is_training) {
+            nn->train();
+        } else {
+            nn->eval();
+        }
         return nn;
     } else if(target == "layer") {
         // prepare to load the model to be tested
@@ -241,7 +248,7 @@ Module* getModel(const std::string& target, const std::string& name, std::map<st
             static_cast<Linear*>(nn)->load_weights(weight_params, "weights");
             static_cast<Linear*>(nn)->load_weights(bias_params, "bias");
         } else if(name=="batchnorm1d") {
-            nn = new BatchNorm1d(toSizet(cfg["in_channels"]));
+            nn = new BatchNorm1d(toSizet(cfg["in_channels"]), false);
             static_cast<BatchNorm1d*>(nn)->load_weights(weight_params, "weights");
             static_cast<BatchNorm1d*>(nn)->load_weights(bias_params, "bias");
             auto running_mean = read_param(param_file + ".running_mean.txt");
@@ -255,6 +262,11 @@ Module* getModel(const std::string& target, const std::string& name, std::map<st
         } else {
             ERROR("Not implemented!\n");
         }
+        if(is_training) {
+            nn->train();
+        } else {
+            nn->eval();
+        }
         return nn;
     } else {
         ERROR("Target: %s not implemented!\n", target.c_str());
@@ -267,6 +279,7 @@ void test_module(
     std::map<std::string, std::string> cfg){
 
     Module* nn = getModel(target, name, cfg, param_file);
+
     DEBUG_PRINT("Load weights to %s\n", name.c_str());
 
     // load beat test points
@@ -286,7 +299,7 @@ void test_module(
             DEBUG_PRINT("[TESTING] %s\n", test_file.c_str());
             std::vector<float> data_vec = read_param(test_file + ".txt");
             std::vector<size_t> shape = read_shape(test_file + ".shape.txt");
-            Tensor* input = new Tensor(data_vec.data(), shape);
+            Tensor* input = new Tensor(data_vec, shape);
             auto start = std::chrono::high_resolution_clock::now();
             //////////////////////////////////////
             // forward process                  //
@@ -341,7 +354,7 @@ void test_op(
             DEBUG_PRINT("[TESTING] %s\n", test_file.c_str());
             std::vector<float> data_vec = read_param(test_file + ".txt");
             std::vector<size_t> shape = read_shape(test_file + ".shape.txt");
-            Tensor* input = new Tensor(data_vec.data(), shape);
+            Tensor* input = new Tensor(data_vec, shape);
             std::vector<float> output_vec;
             auto start = std::chrono::high_resolution_clock::now();
             if(name == "max") {
@@ -354,12 +367,34 @@ void test_op(
             } else if(name == "transpose") {
                 input->transpose(-1, -2);
                 output_vec = input->toVec();
+            } else if(name == "mean") {
+                DimVector shape_o = input->getShape();
+                Tensor* output = new Tensor(shape_o);
+                Tensor* mu = new Tensor(shape_o);
+                input->mean(mu, 0);
+                if(mu->getDim() > 1) {
+                    mu->mean_(1);
+                }
+                output_vec = mu->toVec();
+                delete output, mu;
+            } else if(name == "var") {
+                DimVector shape_o = input->getShape();
+                Tensor* output = new Tensor(shape_o);
+                Tensor* mu = new Tensor(shape_o);
+                input->mean(mu, 0);
+                input->var(output, 0, mu);  // BUG in theory
+                if(output->getDim() > 1) {
+                    output->mean_(1);
+                }
+                output_vec = output->toVec();
+                delete output, mu;
+                
             } else {
                 ERROR("Not implemented op %s!\n", name.c_str());
             }
-            auto end = std::chrono::high_resolution_clock::now();
 
             delete input;
+            auto end = std::chrono::high_resolution_clock::now();
             // log time
             std::chrono::duration<double> diff = end - start;
             count_sum += diff.count();
@@ -384,6 +419,7 @@ int main(int argc, char *argv[]) {
     std::pair<ConfigMap, LayerParams> config = loadYamlConfig(filename);
     std::string target = config.first["target"];
     std::string name = config.first["name"];
+    is_training = config.first["is_training"] == "true";
     if (target == "layer" && config.second.find(name) != config.second.end()) {
         printConfig(config.first, config.second[name]);
     } else if(target=="layer") {

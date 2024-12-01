@@ -77,14 +77,14 @@ void printM(float* weight, const std::vector<size_t> shape) {
     if (dim == 1) {
         int m = shape[0];
         for(int i=0; i<m; i++) {
-            printf("%.3f ", weight[i]);
+            printf("%.5f ", weight[i]);
         }
         printf("\n");
     } else if (dim == 2) {
         int m = shape[0], n = shape[1];
         for (int i=0; i<m; i++) {
             for (int j=0; j<n; j++) {
-                printf("%.3f ", weight[i*n + j]);
+                printf("%.5f ", weight[i*n + j]);
             }
             printf("\n");
         }
@@ -96,7 +96,7 @@ void printM(float* weight, const std::vector<size_t> shape) {
             for (int i=0; i<m; i++) {
                 printf("[");
                 for (int j=0; j<n; j++) {
-                    printf("%.3f ", weight[b * m * n + i * n + j]);
+                    printf("%.5f ", weight[b * m * n + i * n + j]);
                 }
                 printf("]\n");
             }
@@ -108,7 +108,14 @@ void printM(float* weight, const std::vector<size_t> shape) {
 }
 
 
-
+void randomFloatMatrix(float* data, int len, float min, float max) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<float> dist(min, max);
+    for(int i=0; i<len; i++) {
+        data[i] = dist(gen);
+    }
+}
 
 float randomFloat(float a, float b) {
     return a + static_cast <float> (std::rand()) /( static_cast <float> (RAND_MAX/(b-a)));
@@ -117,3 +124,10 @@ float randomFloat(float a, float b) {
 int randomInt(int a, int b) {
     return a + std::rand()%(b-a);
 }
+
+unsigned long long generateRandomSeed() {
+    std::random_device rd;  
+    std::mt19937_64 gen(rd()); 
+    return gen();
+}
+

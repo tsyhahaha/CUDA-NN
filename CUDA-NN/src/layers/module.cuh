@@ -6,13 +6,12 @@
 #include "tensor.cuh"
 
 class Module {
-    protected:
-        bool is_training = false;
+    public:
+        bool is_training;
         std::string prefix;
     public:
-
-        void train();
-        void eval();
+        Module* train();
+        Module* eval();
 };
 
 

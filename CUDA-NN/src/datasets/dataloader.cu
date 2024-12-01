@@ -53,9 +53,9 @@ DataLoader::DataLoader(std::vector<std::vector<float>>& data, std::vector<int>& 
 
 DataLoader::~DataLoader() {
     if (pin_memory) {
-        cudaFreeHost(pinned_data);
+        CHECK(cudaFreeHost(pinned_data));
     }
-    cudaStreamDestroy(stream);
+    CHECK(cudaStreamDestroy(stream));
 }
 
 void DataLoader::loadNextBatchAsync() {
@@ -153,13 +153,13 @@ void DataLoader::getBatchedData(Tensor* &batched_input, Tensor* &batched_mask, s
 
         cudaStreamSynchronize(stream);
         float* tmp = batched_input->getData();
+        batched_input->reset(shape);
         batched_input->setData(prefetched_data);
-        batched_input->setShape(shape);
         this->prefetched_data = tmp;
 
         tmp = batched_mask->getData();
+        batched_mask->reset({shape[0]});
         batched_mask->setData(prefetched_mask);
-        batched_mask->setShape({shape[0]});
         this->prefetched_mask = tmp;
 
         if(this->idx < data.size())

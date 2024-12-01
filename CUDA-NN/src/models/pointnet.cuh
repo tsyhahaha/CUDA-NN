@@ -2,8 +2,6 @@
 #define POINTNET_H
 
 #include "configure.cuh"
-
-// #include "module.cuh"
 #include "tensor.cuh"
 #include "layers.cuh"
 #include "encoder.cuh"
@@ -20,15 +18,22 @@ class PointNet: public BaseModel {
         SoftMax* softmax;
         ReLU* relu;
 
+    private:
+        Tensor* d_out;
+
     public:
         PointNet(std::string prefix, size_t k=10, bool normal_channel=false);
         PointNet(size_t k=10, bool normal_channel=false);
         ~PointNet();
 
         void load_weights();
+        void init_weights();
+        PointNet* train();
+        PointNet* eval();
 
         Tensor* forward(Tensor* data, Tensor* mask);
         Tensor* backward(Tensor* gradients);
+        void name_params(std::map<std::string, Tensor*>& np);
 };
 
 #endif /* !POINTNET_H */

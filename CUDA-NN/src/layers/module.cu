@@ -1,9 +1,11 @@
 #include "module.cuh"
 
-void Module::train() {
+Module* Module::train() {
     this->is_training = true;
+    return this;
 }
 
-void Module::eval() {
+Module* Module::eval() {
     this->is_training = false;
+    return this;
 }

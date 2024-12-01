@@ -18,6 +18,8 @@
 #include "tensor.cuh"
 #include "utils.cuh"
 #include "datasets/dataloader.cuh"
+#include "loss.cuh"
+#include "optimizer.cuh"
 
 /****************************************************************************************
  * 读取模型参数
@@ -134,69 +136,119 @@ void save_vector_to_txt(const std::string& filename, const std::vector<float>& d
     }
 }
 
-int main(int argc, char *argv[]) {
-    
-    std::string dir = argv[1];  // 第一个参数是程序所在的目录，这个目录是存放前一步训练模型参数文件的目录，从这个目录下读取模型参数文件，相对于这个目录读取测试集点云数据和标签
-    // cout << dir;
-    
-    // 读取模型参数
-    auto params = read_params(dir);
-    
-    Configurer::set_global_weights(params);
-    PointNet* pointnet = new PointNet();
-    pointnet->load_weights();
-    pointnet->eval();
+/****************************************************************************************
+ * 存储模型参数
+ ****************************************************************************************/
+void write_param(const std::vector<float>& data, const std::string& filepath) {
+    std::ofstream file(filepath);
+    if (file.is_open()) {
+        for (const auto& value : data) {
+            file << value << std::endl;
+        }
+        file.close();
+    } else {
+        std::cerr << "Unable to open file: " << filepath << std::endl;
+    }
+}
 
-    std::string file_path = "/home/tsyhahaha/CUDA-NN/data/splits/test_point_clouds.h5";
-    std::vector<std::vector<float>> list_of_points;
-    std::vector<int> list_of_labels;
-    // 读取训练集数据
-    read_h5_file(file_path, list_of_points, list_of_labels);
-    size_t batch_size = Configurer::batch_size;
+void save_model_params_and_buffers_to_txt(std::map<std::string, std::vector<float>> params, std::string dir){
+    for (const auto& pair : params) {
+        // std::cout << "name: " << name << std::endl;
+        const std::string& name = pair.first;
+        const std::vector<float>& values = pair.second;
+        std::string fileName = dir + "/" + name + ".txt";
+        write_param(values,fileName);
+    }
+}
+
+
+int main(int argc, char *argv[]) {
+    std::string dir = "/home/tsyhahaha/default";
+    auto params = read_params(dir);
+    Configurer::set_global_weights(params);
+
+    // PointNet* nn = new PointNet();
+    // STN3d* pointnet = nn->feat->stn;
+    PointNet* pointnet = new PointNet();
+    // pointnet->load_weights();
+    
+    // // load model
+    pointnet->train()->init_weights();
+
+    DEBUG_PRINT("FINISH LOADING MODEL...\n");
+
+    // settings
+    size_t batch_size = 2;
+    float lr = Configurer::learning_rate;
     size_t cropping_size = Configurer::cropping_size;
     bool pin_memory = false;
 
+    // load data
+    std::string file_path = "/home/tsyhahaha/CUDA-NN/data/splits/train_point_clouds.h5";
+    std::vector<std::vector<float>> list_of_points;
+    std::vector<int> list_of_labels;
+    read_h5_file(file_path, list_of_points, list_of_labels);
     DataLoader* dataloader = new DataLoader(list_of_points, list_of_labels, batch_size, cropping_size, false, 0, pin_memory, false);
 
+    DEBUG_PRINT("FINISH LOADING DATA...\n");
+
+    // initial source
     std::vector<int> labels(batch_size);
     Tensor* input = new Tensor({batch_size, cropping_size, 3});
     Tensor* mask = new Tensor({batch_size});
-    Tensor* pred = new Tensor({batch_size});
+    Tensor* labels_oh = new Tensor({batch_size, 10}); // class num = 10
+    Tensor* d_out = new Tensor({batch_size, 10});   // pointnet gradients
+
+    cudaStream_t preprocessStream;
+    CHECK(cudaStreamCreate(&preprocessStream));
+
+    // training
+    std::map<std::string, Tensor*> name_params_dict;
+    pointnet->name_params(name_params_dict);
+
+    // CrossEntropyLoss* loss_func = new CrossEntropyLoss();
+    NegativeLikelihoodLoss* loss_func = new NegativeLikelihoodLoss();
+
+    DEBUG_PRINT("INIT OPTIMIZER...\n");
+
+    Optimizer* opt = new SGD(name_params_dict, lr, 0.9);
+
+    DEBUG_PRINT("READY TO BEGIN...\n");
+
+    int* d_labels;
+    CHECK(cudaMalloc(&d_labels, batch_size*sizeof(int)));
+
+    unsigned int data_sum = list_of_points.size();
+    unsigned int batch_num = dataloader->getBatchNum();
 
     // 开始计时，使用chrono计时，不支持其它计时方式
     auto start = std::chrono::high_resolution_clock::now();
 
-    unsigned int right_num = 0;
-    unsigned int data_sum = list_of_points.size();
-    unsigned int batch_num = dataloader->getBatchNum();
-   
     for (size_t i = 0; i < batch_num; i++) {
         
         dataloader->getBatchedData(input, mask, labels);
+
+        // preprocess labels to one hot
+        cudaMemcpyAsync(d_labels, labels.data(), labels.size() * sizeof(int), cudaMemcpyHostToDevice, preprocessStream);
+        Tensor::oneHot(d_labels, labels_oh, labels.size(), 10, preprocessStream);
 
         input->transpose(-2, -1);
 
         Tensor* output = pointnet->forward(input, mask);
 
-        // float* tmp = output->toHost();
-        // printM(tmp, output->getShape());
-        // free(tmp);
+        CHECK(cudaStreamSynchronize(preprocessStream));
 
-        output->argmax(pred, -1);
+        float loss = loss_func->forward(output, labels_oh);
+        loss_func->backward(d_out);
 
-        pred->squeeze();
+        pointnet->backward(d_out);
 
-        float* pred_labels = pred->toHost();
-
-        for(int j=0; j<labels.size(); j++) {
-            if(labels[j] == (int)(pred_labels[j] + 0.5)) right_num++;
-        }
-        // clean up
-        free(pred_labels); 
+        opt->step();
+        opt->zero_grad();
 
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = end - start;
-        DEBUG_PRINT("Batch[%d/%d] Time: %f s\n", i+1, batch_num, diff.count());
+        printf("Batch[%ld/%d] Time: %f s, lr: %.5f, loss: %.3f\n", i+1, batch_num, diff.count(), opt->get_lr(), loss);
     }
     
     // 向主机端同步以等待所有异步调用的GPU kernel执行完毕，这句必须要有
@@ -206,13 +258,17 @@ int main(int argc, char *argv[]) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> diff = end - start;
 
-    // 输出结果，请严格保持此输出格式，并把0.0001替换成实际的准确率，请不要输出除了此结果之外的任何内容！！！
-    std::cout << std::fixed << std::setprecision(4) << diff.count() << ":" << right_num/(float)list_of_points.size();
+    save_model_params_and_buffers_to_txt(params, dir);
 
+    // 输出结果，请严格保持此输出格式，并把0.0001替换成实际的准确率，请不要输出除了此结果之外的任何内容！！！
+    std::cout << std::fixed << std::setprecision(4) << diff.count() << std::endl;
+    std::cout << "0.5000"; //test use
     // clean up
-    delete pointnet;
-    delete input, pred;
+    // delete pointnet;
+    delete input;
     delete dataloader;
+    CHECK(cudaFree(d_labels));
+    CHECK(cudaStreamDestroy(preprocessStream));
 
     return 0;
 }

@@ -5,10 +5,11 @@ void kSoftmax(float* d_data, float* d_out, size_t C, size_t L, bool apply_log) {
     // It'll be faster if blocksize is the factor of L.
     int x = blockIdx.x;
     int tid = threadIdx.x;
-    // int col = blockIdx.x * blockDim.x + threadIdx.x;
 
-    __shared__ float sd_M[BLOCK_SIZE1D];
+    if(x >= C) return;
+
     __shared__ float sd_data[BLOCK_SIZE1D];
+    __shared__ float sd_M[BLOCK_SIZE1D];
     float cur_max = 0.0f;
     float sum = 0.0f;
 
@@ -19,25 +20,6 @@ void kSoftmax(float* d_data, float* d_out, size_t C, size_t L, bool apply_log) {
             sd_data[tid] = d_data[x*L + i*BLOCK_SIZE1D + tid];
         }
         __syncthreads();
-
-        for(int stride=blockDim.x/2; stride>0; stride>>=1) {
-            if(tid < stride && tid + stride + i*BLOCK_SIZE1D < L) {
-                sd_M[tid] = sd_data[tid] > sd_data[tid + stride] ? sd_data[tid] : sd_data[tid+stride];
-            }
-            __syncthreads();
-        }
-        cur_max = cur_max >= sd_M[0] ? cur_max : sd_M[0];
-    }
-
-    // exp()
-    for(int i=0; i<iter; i++) {
-        if (i*BLOCK_SIZE1D + tid < L) {
-            sd_data[tid] = expf(sd_data[tid]);
-        }
-    }
-
-    // reduce to the sum
-    for(int i=0; i<iter; i++) {
         if (i*BLOCK_SIZE1D + tid < L) {
             sd_M[tid] = sd_data[tid];
         }
@@ -45,25 +27,60 @@ void kSoftmax(float* d_data, float* d_out, size_t C, size_t L, bool apply_log) {
 
         for(int stride=blockDim.x/2; stride>0; stride>>=1) {
             if(tid < stride && tid + stride + i*BLOCK_SIZE1D < L) {
+                sd_M[tid] = sd_M[tid] > sd_M[tid + stride] ? sd_M[tid] : sd_M[tid+stride];
+            }
+            __syncthreads();
+        }
+        cur_max = cur_max >= sd_M[0] ? cur_max : sd_M[0];
+    }
+
+    for(int i=0; i<iter; i++) {
+        if (i*BLOCK_SIZE1D + tid < L) {
+            sd_data[tid] = expf(sd_data[tid] - cur_max);
+        }
+        __syncthreads();
+
+        if (i*BLOCK_SIZE1D + tid < L) {
+            sd_M[tid] = sd_data[tid];
+        }
+        __syncthreads();
+
+        for(int stride=blockDim.x/2; stride>0; stride>>=1) {
+            if(tid < L && tid + stride < L && tid < stride && tid + stride + i*BLOCK_SIZE1D < L) {
                 sd_M[tid] = sd_M[tid] + sd_M[tid + stride];
             }
             __syncthreads();
         }
-        sum = sum + sd_M[0];
+        sum = sd_M[0];
     }
 
-    // normalization
     for(int i=0; i<iter; i++) {
-        if (i*BLOCK_SIZE1D + tid < L) {
+        if(tid < L) {
             if(apply_log) {
-                d_out[x*L + i*BLOCK_SIZE1D + tid] = logf(sd_data[tid]/sum);
+                d_out[x*L + i*BLOCK_SIZE1D + tid] = logf(sd_data[tid]/(sum + 1e-4));
             } else {
-                d_out[x*L + i*BLOCK_SIZE1D + tid] = sd_data[tid]/sum;
+                d_out[x*L + i*BLOCK_SIZE1D + tid] = sd_data[tid]/(sum + 1e-4);
             }
         }
     }
 }
 
+
+__global__
+void kSoftMaxBP(float* d_out, float* d_logits, float* d_grad, size_t N, size_t L) {
+    // assume that not apply_log
+    // It'll be faster if blocksize is the factor of L.
+    int x = blockIdx.x;
+    int tid = threadIdx.x;
+
+    int iter = (L-1)/BLOCK_SIZE1D + 1;
+    for(int i=0; i<iter; i++) {
+        if(tid + i*BLOCK_SIZE1D < L && x < N) {
+            float logits = d_logits[x*L + tid + i*BLOCK_SIZE1D];
+            d_grad[x*L + tid + i*BLOCK_SIZE1D] = d_out[x*L + tid + i*BLOCK_SIZE1D] * logits * (1-logits);
+        }
+    }
+}
 
 SoftMax::SoftMax(std::string prefix, size_t dim, bool apply_log) {
     this->dim = dim;
@@ -76,14 +93,20 @@ SoftMax::SoftMax(size_t dim, bool apply_log) {
     this->apply_log = apply_log;
 }
 
+SoftMax* SoftMax::train() {
+    this->is_training = true;
+    this->apply_log = false;
+    return this;
+}
+
 Tensor* SoftMax::forward(Tensor* data) {
+    DEBUG_PRINT("[SoftMax] %sforward\n", this->prefix.c_str());
 
     DimVector shape_o = data->getShape();
     if(this->output == nullptr) {
         this->output = new Tensor(shape_o);
-    }
-    this->output->reset(shape_o);    
-    
+    } this->output->reset(shape_o);    
+
     if(this->is_training)
         this->input = data;
     //////////////////////////////////////
@@ -99,19 +122,31 @@ Tensor* SoftMax::forward(Tensor* data) {
         ERROR("Not implemented!\n");
     }
 
-    size_t L = data->getShape()[1], C = data->getShape()[0];
-
-    if(this->output == nullptr) {
-        this->output = new Tensor({C, L});
-    }
+    size_t L = data->getSize(1), N = data->getSize(0);
 
     int block = BLOCK_SIZE1D;
-    int grid = C;
-    kSoftmax<<<grid, block>>>(data->getData(), this->output->getData(), C, L, this->apply_log); CHECK_KERNEL();
+    int grid = N;
+
+    kSoftmax<<<grid, block>>>(data->getData(), this->output->getData(), N, L, !this->is_training); CHECK_KERNEL();
 
     return this->output;
 }
 
 Tensor* SoftMax::backward(Tensor* gradients) {
-    return nullptr;
+    DEBUG_PRINT("[SoftMax] %sbackward\n", this->prefix.c_str());
+
+    if(input->getDim() != 2 || this->dim != 1) {
+        ERROR("Not implemented!\n");
+    }
+
+    DimVector shape_o = input->getShape();
+    size_t N = shape_o[0], L = shape_o[1];
+    if(this->d_in == nullptr) {
+        this->d_in = new Tensor(shape_o);
+    } this->d_in->reset(shape_o);
+
+    int block = BLOCK_SIZE1D;
+    int grid = N;
+    kSoftMaxBP<<<grid, block>>>(gradients->getData(), output->getData(), this->d_in->getData(), N, L); CHECK_KERNEL();
+    return this->d_in;
 } 

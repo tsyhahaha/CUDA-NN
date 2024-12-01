@@ -249,39 +249,107 @@ void kLinear2D_v3(float* input, float* d_out, float* weights, float* bias, int M
     }
 }
 
+__global__ void kBackprop_to_weights_and_bias(
+    float *gradients, float* in, float *d_weights, float *d_bias, int N, int C_in, int C_out) {
+    // gradients(N, C_out).T @ input(N, C_in) = d_weights(C_out, C_in)
+    // gradients(N, C_out) -> d_bias(C_out)
+    float cVal = 0.0f;
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
 
-Linear::Linear(std::string prefix, size_t in_features, size_t out_features, bool bias, InitType init_type) {
+    if(row >= C_out || col >= C_in) return;
+
+    __shared__ float ds_A[BLOCK_SIZE2D][TILE_SIZE];
+    __shared__ float ds_B[TILE_SIZE][BLOCK_SIZE2D];
+
+    int phase = (N - 1) / TILE_SIZE + 1;
+    for(int p=0; p<phase;p++) {
+        if(threadIdx.x < TILE_SIZE) { 
+            if (row < C_out && p*TILE_SIZE + threadIdx.x < N) {
+                // if(threadIdx.y == 12 && blockIdx.x == 14) {
+                //     printf("N=%d, C_out=%d, gradients[%d][%d]\n", N, C_out, p*TILE_SIZE + threadIdx.x, row);
+                // }
+                ds_A[threadIdx.y][threadIdx.x] = gradients[(p*TILE_SIZE + threadIdx.x)*C_out + row];
+            } else if(threadIdx.y < BLOCK_SIZE2D && threadIdx.x < TILE_SIZE) {
+                ds_A[threadIdx.y][threadIdx.x] = 0.0f;
+            }
+        }
+
+        if(threadIdx.y < TILE_SIZE) {
+            if(col < C_in && p*TILE_SIZE + threadIdx.y < N) {
+                if(threadIdx.y == 12 && blockIdx.x == 14) {
+                    printf("in[%d][%d]\n", p*TILE_SIZE + threadIdx.y, col);
+                }
+                ds_B[threadIdx.y][threadIdx.x] = in[(p*TILE_SIZE + threadIdx.y)*C_in + col];
+            } else if(threadIdx.y < TILE_SIZE && threadIdx.x < BLOCK_SIZE2D) {
+                ds_B[threadIdx.y][threadIdx.x] = 0.0f;
+            }
+        }
+
+        __syncthreads();
+        for (int i=0; i<TILE_SIZE; i++) {
+            // constant: ds_A's x , ds_B's y
+            cVal += ds_A[threadIdx.y][i] * ds_B[i][threadIdx.x];
+        }
+        __syncthreads();
+
+        // accumulate to bias
+        for(int stride=TILE_SIZE/2; stride>0; stride>>=1) {
+            if(threadIdx.x < stride && threadIdx.x + stride + p*TILE_SIZE < N) {
+                ds_A[threadIdx.y][threadIdx.x] = ds_A[threadIdx.y][threadIdx.x] + ds_A[threadIdx.y][threadIdx.x + stride];
+                __syncthreads();
+            }
+        }
+        if(threadIdx.x == 0) {
+            atomicAdd(&d_bias[row], ds_A[threadIdx.y][0]);
+        }
+    }
+
+    if (row < C_out && col < C_in)
+        atomicAdd(&d_weights[row*C_in + col], cVal);
+}
+
+Linear::Linear(std::string prefix, size_t in_features, size_t out_features, bool bias) {
     this->in_features = in_features;
     this->out_features = out_features;
 
     DimVector weights_shape = {out_features, in_features};
-    this->weights = new Tensor(weights_shape);
-    this->weights->initialize(is_training ? init_type : NONE);
+    this->weights = new Tensor(weights_shape, NONE);
 
     this->prefix = prefix;
     
     if(bias) {
         DimVector bias_shape = {out_features};
-        this->bias = new Tensor(bias_shape, this->is_training ? ZERO : NONE);
+        this->bias = new Tensor(bias_shape, NONE);
     }
 }
 
-Linear::Linear(size_t in_features, size_t out_features, bool bias, InitType init_type) {
+Linear::Linear(size_t in_features, size_t out_features, bool bias) {
     this->in_features = in_features;
     this->out_features = out_features;
 
     DimVector weights_shape = {out_features, in_features};
-    this->weights = new Tensor(weights_shape);
-
-    this->weights->initialize(init_type);
+    this->weights = new Tensor(weights_shape, NONE);
 
     if(bias) {
         DimVector bias_shape = {out_features};
-        this->bias = new Tensor(bias_shape, this->is_training ? ZERO : NONE);
+        this->bias = new Tensor(bias_shape, NONE);
+    }
+}
+
+void Linear::init_weights() {
+    float sqrt_k = 1.0f/(sqrt(in_features));
+    this->weights->initialize(KAIMING, sqrt_k);
+    DEBUG_PRINT("Linear init weights: KAIMING\n");
+    if(bias) {
+        this->bias->initialize(KAIMING, sqrt_k);
+        DEBUG_PRINT("Linear init bias: KAIMING\n");
     }
 }
 
 Tensor* Linear::forward(Tensor* data) {
+    DEBUG_PRINT("[Linear] %sforward\n", this->prefix.c_str());
+
     // data(B x N) @ weights(M x N).T + bias(M) = output(B x M)
     // reinitializations
     size_t bz = data->getShape()[0];
@@ -306,12 +374,6 @@ Tensor* Linear::forward(Tensor* data) {
     dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
     dim3 grid((out_features - 1)/(BLOCK_SIZE2D)+1, (bz-1)/(BLOCK_SIZE2D)+1);
 
-    // if(bz % 4 == 0 && out_features % 4 == 0 && in_features % 4 == 0) {
-    //     kLinear2D_v3<<<grid, block>>>(data->getData(), output->getData(), weights->getData(), bias->getData(), bz, in_features, out_features); CHECK_KERNEL();
-    // } else {
-    //     kLinear2D<<<grid, block>>>(data->getData(), output->getData(), weights->getData(), bias->getData(), bz, in_features, out_features); CHECK_KERNEL();
-    // }
-
     kLinear2D<<<grid, block>>>(data->getData(), output->getData(), weights->getData(), bias->getData(), bz, in_features, out_features); CHECK_KERNEL();
 
     if(this->output->getShape()[0] != data->getShape()[0] ||  \
@@ -321,9 +383,44 @@ Tensor* Linear::forward(Tensor* data) {
                 ERROR("shape not matched!\n");
             }
 
+
     return this->output;
 }
 
+Linear* Linear::train() {
+    BaseLayer::train();
+    size_t bz = Configurer::batch_size;
+    if(!d_in) {
+        this->d_in = new Tensor({bz, in_features});
+    } this->d_in->reset({bz, in_features});
+    return this;
+}
+
 Tensor* Linear::backward(Tensor* gradients) {
-    return nullptr;
+    DEBUG_PRINT("[Linear] %sbackward\n", this->prefix.c_str());
+
+    int N = gradients->getSize(0), C_in = in_features, C_out = out_features;
+    // gradients->transpose(); // (C_out x B)
+    // // d_out(C_out x B) @ input(C_in x B).T = (C_out x C_in)
+    // gradients->matmul(this->d_weights, this->input);
+    // gradients->transpose(); // (B x C_out)
+    // gradients->sumToDim(d_bias, 1); // (B x C_out)->(C_out)
+    // accumulate grads
+    // this->weights->acc_grads(d_weights);
+    // this->bias->acc_grads(d_bias);
+
+
+    dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
+    dim3 grid((in_features - 1)/(BLOCK_SIZE2D)+1, (out_features-1)/(BLOCK_SIZE2D)+1);
+
+
+    Tensor* d_weights = weights->getGradsAcc();
+    Tensor* d_bias = bias->getGradsAcc();
+
+    kBackprop_to_weights_and_bias<<<grid, block>>>(gradients->getData(), input->getData(), d_weights->getData(), d_bias->getData(), N, C_in, C_out); CHECK_KERNEL();
+
+    // d_out(B x C_out) @ weights(C_out x C_in) = d_in(B x C_in)
+    gradients->matmul(this->d_in, this->weights);
+
+    return d_in;
 }

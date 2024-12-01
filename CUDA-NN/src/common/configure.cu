@@ -70,3 +70,4 @@ float Configurer::learning_rate = getFloatValue("LEARNING_RATE", DEFAULT_LEARNIN
 size_t Configurer::epochs = getUIntValue("EPOCHS", DEFAULT_EPOCHS);
 size_t Configurer::batch_size = getUIntValue("BATCH_SIZE", DEFAULT_BATCH_SIZE);
 size_t Configurer::cropping_size = getUIntValue("CROPPING_SIZE", DEFAULT_CROPPING_SIZE);
+bool Configurer::hook = false;
