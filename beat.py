@@ -40,8 +40,8 @@ def gen(cfg):
     print(f"Generate test points for {cfg['name'].upper()}")
     for i in tqdm(range(num)):
         shape = ()
-        B, L = 4, 20000
         if cfg['target'] == 'model':
+            B, L = 4, 1000
             if cfg['name'] in ["pointnet", 'stn3d', 'encoder']:
                 shape = (B, 3, L)
             elif cfg['name'] == 'stnkd':
@@ -49,15 +49,20 @@ def gen(cfg):
             else:
                 raise ValueError(f"cfg[{cfg['name']}] not implemented!")
         elif cfg['target'] == 'layer':
+            B, L = 4, 1000
             if cfg['name'] == "linear":
                 channel = cfg['linear']['in_features']
                 shape = (B, channel)
-            elif cfg['name'] in ["conv1d", "batchnorm1d"]:
+            elif cfg['name'] == "conv1d":
+                channel = cfg[cfg['name']]['in_channels']
+                shape = (B, channel, L)
+            elif cfg['name'] == "batchnorm1d":
                 channel = cfg[cfg['name']]['in_channels']
                 shape = (B, channel, L)
             else:
                 raise ValueError(f"cfg[{cfg['name']}] not implemented!")
         elif cfg['target'] == 'op':
+            B, L = random.randint(1, 8), random.randint(64, 1024)
             channel = random.randint(3, 64)
             if cfg['name'] == 'max':
                 shape = (B, channel, L)
@@ -65,6 +70,16 @@ def gen(cfg):
                 shape = (B, L)
             elif cfg['name'] == 'transpose':
                 shape = (B, channel, L)
+            elif cfg['name'] == 'mean':
+                if random.random() > 0.5:
+                    shape = (B, channel, L)
+                else:
+                    shape = (B, L)
+            elif cfg['name'] == 'var':
+                if random.random() > 0.5:
+                    shape = (B, channel, L)
+                else:
+                    shape = (B, L)
         data_point = np.random.rand(*shape)
         np.savetxt(os.path.join(save_dir, f'{i+1}.txt'), data_point.flatten())
         np.savetxt(os.path.join(save_dir, f'{i+1}.shape.txt'), np.array(shape).flatten(), fmt="%d")
@@ -97,7 +112,6 @@ def test_py(cfg):
     os.makedirs(pyout_dir, exist_ok=True)
     clear_directory(pyout_dir)
 
-    # test_op
     if cfg['target'] == 'op':
         if cfg['name'] == 'max':
             net = lambda x: torch.max(x, -1, keepdim=False)[0]
@@ -105,8 +119,12 @@ def test_py(cfg):
             net = lambda x: torch.argmax(x, -1, keepdim=False)
         elif cfg['name'] == 'transpose':
             net = lambda x: torch.transpose(x, -2, -1)
+        elif cfg['name'] == 'mean':
+            net = lambda x: torch.mean(x, (0,2))
+        elif cfg['name'] == 'var':
+            net = lambda x: torch.var(x, (0,2), unbiased=False)
     elif cfg['target'] == 'model':
-    # if test the model
+        # if test the model
         net = PointNet()
         net = load_model_params_and_buffers_from_txt(net, cfg['param_path'])
         if cfg['name'] == 'stn3d':
@@ -131,7 +149,6 @@ def test_py(cfg):
         
         net.weight.data = torch.from_numpy(weights).cuda().reshape(net.weight.shape)
         net.bias.data = torch.from_numpy(bias).cuda().reshape(net.bias.data.shape)
-        # net.bias.data = torch.zeros(net.bias.data.shape).cuda()
 
         if cfg['name'] == 'batchnorm1d':
             running_mean = np.loadtxt(param_path + ".running_mean.txt", dtype=np.float32)
@@ -140,7 +157,11 @@ def test_py(cfg):
             net.running_var = torch.from_numpy(running_var).cuda()
     
     if isinstance(net, nn.Module):
-        net = net.eval().cuda().float()
+        net = net.cuda().float()
+        if cfg['is_training']:
+            net = net.train()
+        else:
+            net = net.eval()
 
     files = os.listdir(beat_dir)
     files = [s[:-4] for s in files if '.' not in s[:-4]]
@@ -161,6 +182,11 @@ def test_py(cfg):
                 output = torch.argmax(output, dim=-1)
         elif cfg['name'] == 'encoder':
             output, _, __ = net(data.to(torch.float32))
+        elif cfg['name'] in ['mean', 'var']:
+            if len(data.shape) == 2:
+                data = data.unsqueeze(-1)
+            assert(len(data.shape) == 3)
+            output = net(data.to(torch.float32))
         else:
             output = net(data.to(torch.float32))
         time_end = time.time()

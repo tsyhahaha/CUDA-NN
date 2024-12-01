@@ -10,7 +10,7 @@ base="CUDA-NN/src"
 include_folder="CUDA-NN/include"
 
 if [ -z "$1" ]; then
-  echo "Usage: $0 <main|test>"
+  echo "Usage: $0 <main|test|train>"
   exit 1
 fi
 
@@ -18,8 +18,10 @@ if [ "$1" == "main" ]; then
   main_file="$base/main.cu"
 elif [ "$1" == "test" ]; then
   main_file="$base/test.cu"
+elif [ "$1" == "train" ]; then
+  main_file="$base/train.cu"
 else
-  echo "Invalid argument: $1. Use 'main' or 'test'."
+  echo "Invalid argument: $1. Use 'main' or 'test/train'."
   exit 1
 fi
 
@@ -53,13 +55,15 @@ should_add_line() {
 
 
 # 定义合并的顺序，将 kernels 文件夹放在最前面
-folders=("tensor/kernels" "common" "tensor" "layers" "models" "datasets")
+# folders=("tensor/kernels" "common" "tensor" "layers" "models" "datasets")  # inference
+folders=("tensor/kernels" "common" "tensor" "layers" "models" "datasets" "loss" "optimizer") 
 
 # 使用关联数组来指定特定文件夹及其对应的编译顺序
 declare -A specific_folders
 specific_folders=(
     ["models"]="base stn3d stnkd encoder pointnet"
-    ["layers"]="module base"  # 添加更多的文件夹及其顺序
+    ["layers"]="module base" 
+    ["optimizer"]="base_opt"
 )
 
 includes=""
