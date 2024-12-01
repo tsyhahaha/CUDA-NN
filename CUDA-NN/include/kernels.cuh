@@ -11,13 +11,44 @@
 #include <cuda.h>
 #include "cuda_runtime.h"
 
+/* backprop kernels */
+__global__
+void kMaxBackprop(
+    float* gradients, float* d_in, float* max_index, size_t N, size_t C, size_t L
+);
+
+__global__ 
+void kCheckNaN(float* matrix, int size, bool* result);
+
 /* unary op */
+
+__global__
+void kFill(float* data, float c, size_t L);
+
+__global__
+void kMask_l2(float* data, float* mask, int N, int C);
+
+__global__
+void kMask_l3(float* data, float* mask, int N, int C, int L);
+
+__global__
+void kMaxIdxLastDim2D(float* d_data, float* d_out, float* d_index,  size_t C, size_t L);
+
+__global__
+void kMaxIdxLastDim3D(float* d_data, float* d_out, float* d_index, size_t N, size_t C, size_t L);
+
+__global__
+void kBatchReduce2D(float* d_data, float* d_out, size_t N, size_t C, bool type
+);
+
+__global__
+void kOneHot(int* d_data, float* d_out, int N, int C);
 
 __global__
 void kMaskFillLast3D(float* d_data, float* mask, float value, int N, int C, int L);
 
 __global__
-void kSumLastDim2D(float* d_data, float* d_out, size_t C, size_t L
+void kSumLastDim2D(float* d_data, float* d_out, size_t C, size_t L, bool mean
 );
 
 __global__
@@ -49,6 +80,9 @@ void kExp(float* d_data, float* d_out, int n_data);
 
 __global__
 void kLog(float* d_data, float* d_out, int n_data);
+
+__global__
+void kSquare(float* d_data, float* d_out, int n_data);
 
 /* add kernels */
 __global__

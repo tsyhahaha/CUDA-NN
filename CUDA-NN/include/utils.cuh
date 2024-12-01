@@ -5,6 +5,7 @@
 #include<stdio.h>
 #include<iostream>
 #include<vector>
+#include<random>
 
 #define FP32_MIN -1e7f
 
@@ -57,8 +58,13 @@ float* loadWeightsFromTxt(const char* filename, std::vector<size_t> shape);
 
 void printM(float* weight, const std::vector<size_t> shape);
 
+void randomFloatMatrix(float* data, int len, float min, float max);
+
 float randomFloat(float a, float b);
 
 int randomInt(int a, int b);
+
+unsigned long long generateRandomSeed();
+
 #endif /* !UTILS_H */
    
