@@ -15,7 +15,7 @@ class BatchNorm1d: public BaseLayer {
     private:
         size_t num_features;        // the num of features/channels, C
         float eps;
-        float momentum; // x^_new = (1-momentum)*x^ + monmentum*x_t (ob)
+        float monmentum; // x^_new = (1-momentum)*x^ + monmentum*x_t (ob)
         bool affine;    // alpha, beta
         bool track_running_stats;
         bool relu;
@@ -51,6 +51,7 @@ class BatchNorm1d: public BaseLayer {
         Tensor* forward(Tensor* data);
         Tensor* backward(Tensor* gradients);
         BatchNorm1d* train();
+        void name_params(std::map<std::string, Tensor*>& np);
     
     private:
         void prepare_backward();

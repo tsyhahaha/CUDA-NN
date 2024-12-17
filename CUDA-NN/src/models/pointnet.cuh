@@ -1,6 +1,7 @@
 #ifndef POINTNET_H
 #define POINTNET_H
 
+#include "utils.cuh"
 #include "configure.cuh"
 #include "tensor.cuh"
 #include "layers.cuh"

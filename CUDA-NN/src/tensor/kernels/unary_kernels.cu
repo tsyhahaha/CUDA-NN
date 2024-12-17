@@ -28,20 +28,20 @@ void kMask_l3(float* data, float* mask, int N, int C, int L) {
 
     if(x >= L || y >= C || z >= N) return;
 
-    data[z*C*L + y * C + x] = mask[z*C*L + y * C + x] > 0 ? data[z*C*L + y * C + x]:0.0f;
+    data[z*C*L + y * C + x] = mask[z*C*L + y * C + x] > 0 ? data[z*C*L + y * C + x] : 0.0f;
 }
 
 /* (N, C) -> (C) */
 __global__
-void kBatchReduce2D(float* d_data, float* d_out, size_t N, size_t C, bool type ) {
-    int tid = threadIdx.x + blockDim.x * blockIdx.x;
+void kBatchReduce2D(float* d_data, float* d_out, size_t N, size_t C, bool mean) {
+    int tid = threadIdx.x + blockDim.x * blockIdx.x;    // BLOCK_SIZE1D
     int bid = threadIdx.y;  // just one grid `BATCH_BASE x 1`
 
     __shared__ float sd_M[BLOCK_SIZE1D][BATCH_BASE];
-    float cVal = 0.0f;
 
     if(tid >= C) return;
 
+    float cVal = 0.0f;
     int iter = (N-1)/BATCH_BASE + 1;
     for(int i=0; i<iter; i++) {
         if(bid + i*BATCH_BASE < N) {
@@ -63,11 +63,12 @@ void kBatchReduce2D(float* d_data, float* d_out, size_t N, size_t C, bool type )
     __syncthreads();
 
     if (bid==0 && tid < C) {
-        if(type) {  // mean
-            d_out[tid] = cVal / N;}
+        if(mean) {  // mean
+            d_out[tid] = cVal / N;
         } else {    // sum
             d_out[tid] = cVal;
         }
+    }
 }
 
 
@@ -344,12 +345,11 @@ void kSumLastDim2D(float* d_data, float* d_out, size_t N, size_t L, bool mean
     // It'll be faster if blocksize is the factor of L.
     int tid = threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
+    __shared__ float sd_M[BATCH_BASE][BLOCK_SIZE1D];
 
     if(y >= N) return;
 
-    __shared__ float sd_M[BATCH_BASE][BLOCK_SIZE1D];
     float cVal = 0.0f;
-
     int iter = (L-1)/BLOCK_SIZE1D + 1;
     for(int i=0; i<iter; i++) {
         if (i*BLOCK_SIZE1D + tid < L) {
@@ -357,16 +357,15 @@ void kSumLastDim2D(float* d_data, float* d_out, size_t N, size_t L, bool mean
         }
         __syncthreads();
 
-        for(int stride=blockDim.x/2; stride>0; stride>>=1) {
+        for(int stride=BLOCK_SIZE1D/2; stride>0; stride>>=1) {
             if(tid < stride && tid + stride + i*BLOCK_SIZE1D < L) {
-                sd_M[threadIdx.y][tid] = sd_M[threadIdx.y][tid] + sd_M[threadIdx.y][tid + stride];
+                sd_M[threadIdx.y][tid] += sd_M[threadIdx.y][tid + stride];
             }
             __syncthreads();
         }
         if(tid == 0)
             cVal += sd_M[threadIdx.y][0];
     }
-    __syncthreads();
 
     if (tid==0) {
         if(mean) {

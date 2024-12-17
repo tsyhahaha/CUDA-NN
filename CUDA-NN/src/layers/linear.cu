@@ -254,6 +254,7 @@ __global__ void kBackprop_to_weights_and_bias(
     // gradients(N, C_out).T @ input(N, C_in) = d_weights(C_out, C_in)
     // gradients(N, C_out) -> d_bias(C_out)
     float cVal = 0.0f;
+    float acc_bias = 0.0f;
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -263,30 +264,24 @@ __global__ void kBackprop_to_weights_and_bias(
     __shared__ float ds_B[TILE_SIZE][BLOCK_SIZE2D];
 
     int phase = (N - 1) / TILE_SIZE + 1;
-    for(int p=0; p<phase;p++) {
+    for(int p=0; p<phase; p++) {
         if(threadIdx.x < TILE_SIZE) { 
             if (row < C_out && p*TILE_SIZE + threadIdx.x < N) {
-                // if(threadIdx.y == 12 && blockIdx.x == 14) {
-                //     printf("N=%d, C_out=%d, gradients[%d][%d]\n", N, C_out, p*TILE_SIZE + threadIdx.x, row);
-                // }
                 ds_A[threadIdx.y][threadIdx.x] = gradients[(p*TILE_SIZE + threadIdx.x)*C_out + row];
-            } else if(threadIdx.y < BLOCK_SIZE2D && threadIdx.x < TILE_SIZE) {
+            } else {
                 ds_A[threadIdx.y][threadIdx.x] = 0.0f;
             }
         }
 
         if(threadIdx.y < TILE_SIZE) {
             if(col < C_in && p*TILE_SIZE + threadIdx.y < N) {
-                if(threadIdx.y == 12 && blockIdx.x == 14) {
-                    printf("in[%d][%d]\n", p*TILE_SIZE + threadIdx.y, col);
-                }
                 ds_B[threadIdx.y][threadIdx.x] = in[(p*TILE_SIZE + threadIdx.y)*C_in + col];
-            } else if(threadIdx.y < TILE_SIZE && threadIdx.x < BLOCK_SIZE2D) {
+            } else {
                 ds_B[threadIdx.y][threadIdx.x] = 0.0f;
             }
         }
-
         __syncthreads();
+
         for (int i=0; i<TILE_SIZE; i++) {
             // constant: ds_A's x , ds_B's y
             cVal += ds_A[threadIdx.y][i] * ds_B[i][threadIdx.x];
@@ -295,18 +290,21 @@ __global__ void kBackprop_to_weights_and_bias(
 
         // accumulate to bias
         for(int stride=TILE_SIZE/2; stride>0; stride>>=1) {
-            if(threadIdx.x < stride && threadIdx.x + stride + p*TILE_SIZE < N) {
-                ds_A[threadIdx.y][threadIdx.x] = ds_A[threadIdx.y][threadIdx.x] + ds_A[threadIdx.y][threadIdx.x + stride];
+            if(threadIdx.x < stride && threadIdx.x + stride < TILE_SIZE &&  threadIdx.x + stride + p*TILE_SIZE < N) {
+                ds_A[threadIdx.y][threadIdx.x] += ds_A[threadIdx.y][threadIdx.x + stride];
                 __syncthreads();
             }
         }
-        if(threadIdx.x == 0) {
-            atomicAdd(&d_bias[row], ds_A[threadIdx.y][0]);
+
+        if(col == 0 && row < C_out) {
+            acc_bias += ds_A[threadIdx.y][0];
         }
     }
 
-    if (row < C_out && col < C_in)
+    if (row < C_out && col < C_in) {
+        atomicAdd(&d_bias[row], acc_bias);
         atomicAdd(&d_weights[row*C_in + col], cVal);
+    }
 }
 
 Linear::Linear(std::string prefix, size_t in_features, size_t out_features, bool bias) {
@@ -350,7 +348,7 @@ void Linear::init_weights() {
 Tensor* Linear::forward(Tensor* data) {
     DEBUG_PRINT("[Linear] %sforward\n", this->prefix.c_str());
 
-    // data(B x N) @ weights(M x N).T + bias(M) = output(B x M)
+    // data(N @ C_in) @ weights(C_out x C_in).T + bias(C_out) = output(N, C_out)
     // reinitializations
     size_t bz = data->getShape()[0];
     DimVector shape_o = {bz, out_features};
@@ -400,27 +398,28 @@ Tensor* Linear::backward(Tensor* gradients) {
     DEBUG_PRINT("[Linear] %sbackward\n", this->prefix.c_str());
 
     int N = gradients->getSize(0), C_in = in_features, C_out = out_features;
-    // gradients->transpose(); // (C_out x B)
-    // // d_out(C_out x B) @ input(C_in x B).T = (C_out x C_in)
-    // gradients->matmul(this->d_weights, this->input);
-    // gradients->transpose(); // (B x C_out)
-    // gradients->sumToDim(d_bias, 1); // (B x C_out)->(C_out)
-    // accumulate grads
-    // this->weights->acc_grads(d_weights);
-    // this->bias->acc_grads(d_bias);
-
 
     dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
     dim3 grid((in_features - 1)/(BLOCK_SIZE2D)+1, (out_features-1)/(BLOCK_SIZE2D)+1);
 
 
-    Tensor* d_weights = weights->getGradsAcc();
-    Tensor* d_bias = bias->getGradsAcc();
+    Tensor* d_weights = weights->getGradsAcc(); // (C_out, C_in)
+    Tensor* d_bias = bias->getGradsAcc();   // (C_out)
 
     kBackprop_to_weights_and_bias<<<grid, block>>>(gradients->getData(), input->getData(), d_weights->getData(), d_bias->getData(), N, C_in, C_out); CHECK_KERNEL();
 
     // d_out(B x C_out) @ weights(C_out x C_in) = d_in(B x C_in)
     gradients->matmul(this->d_in, this->weights);
+
+    // Save for checking grads
+    if(Configurer::track_grads && (Configurer::target=="linear" || Configurer::target == "all")) {
+        save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "d_out.txt", gradients->toVec());
+        save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "in.txt", input->toVec());
+        save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "weights.txt", weights->toVec());
+        save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "d_in.txt", d_in->toVec());
+        save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "d_weights.txt", d_weights->toVec());
+        save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "d_bias.txt", d_bias->toVec());
+    }
 
     return d_in;
 }

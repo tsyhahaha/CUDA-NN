@@ -163,22 +163,23 @@ void save_model_params_and_buffers_to_txt(std::map<std::string, std::vector<floa
 
 
 int main(int argc, char *argv[]) {
-    std::string dir = "/home/tsyhahaha/default";
-    auto params = read_params(dir);
-    Configurer::set_global_weights(params);
+    std::string base = "/home/tsyhahaha/default";
+    auto params_tmp = read_params(base);
+    Configurer::set_global_weights(params_tmp);
 
-    // PointNet* nn = new PointNet();
-    // STN3d* pointnet = nn->feat->stn;
+    std::string dir = argv[1];
+    std::map<std::string, std::vector<float>> params;
+
+    // load model
     PointNet* pointnet = new PointNet();
+    pointnet->train();
+    pointnet->init_weights();
     // pointnet->load_weights();
-    
-    // // load model
-    pointnet->train()->init_weights();
 
     DEBUG_PRINT("FINISH LOADING MODEL...\n");
 
     // settings
-    size_t batch_size = 2;
+    size_t batch_size = Configurer::batch_size;
     float lr = Configurer::learning_rate;
     size_t cropping_size = Configurer::cropping_size;
     bool pin_memory = false;
@@ -224,7 +225,7 @@ int main(int argc, char *argv[]) {
     // 开始计时，使用chrono计时，不支持其它计时方式
     auto start = std::chrono::high_resolution_clock::now();
 
-    for (size_t i = 0; i < batch_num; i++) {
+    for (size_t i = 0; i < 1; i++) {
         
         dataloader->getBatchedData(input, mask, labels);
 
@@ -258,7 +259,11 @@ int main(int argc, char *argv[]) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> diff = end - start;
 
-    save_model_params_and_buffers_to_txt(params, dir);
+    for(auto& pair: name_params_dict) {
+        params.insert(std::make_pair(pair.first, pair.second->toVec()));
+    }
+
+    // save_model_params_and_buffers_to_txt(params, dir);
 
     // 输出结果，请严格保持此输出格式，并把0.0001替换成实际的准确率，请不要输出除了此结果之外的任何内容！！！
     std::cout << std::fixed << std::setprecision(4) << diff.count() << std::endl;

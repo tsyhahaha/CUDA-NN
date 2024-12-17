@@ -176,6 +176,10 @@ Tensor* STNkd::backward(Tensor* gradients) {
     max_gradients->reset({N, C, L});
     kMaxBackprop<<<grid, block>>>(g->getData(), max_gradients->getData(), max_index->getData(), N, C, L); CHECK_KERNEL();
 
+    save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "max_d_out.txt", g->toVec());
+    save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "max_d_in.txt", max_gradients->toVec());
+    save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "max_index.txt", max_index->toVec());
+
     g = conv3->backward(bn3->backward(max_gradients));
     g = conv2->backward(bn2->backward(g));
     g = conv1->backward(bn1->backward(g));

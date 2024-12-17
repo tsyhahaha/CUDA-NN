@@ -26,6 +26,19 @@ int Configurer::getIntValue(std::string variableName, int defaultValue) {
     return std::atoi(envValue);
 }
 
+bool Configurer::getBoolValue(std::string variableName, bool defaultValue) {
+    char* envValue = std::getenv(variableName.c_str());
+    if (!envValue) {
+        return defaultValue;
+    }
+    std::string envStr(envValue);
+    if (envStr == "true" || envStr == "1" || envStr == "yes") {
+        return true;
+    }
+    return false;
+}
+
+
 size_t Configurer::getUIntValue(std::string variableName, size_t defaultValue) {
         char* envValue = std::getenv(variableName.c_str());
         if (!envValue) {
@@ -70,4 +83,7 @@ float Configurer::learning_rate = getFloatValue("LEARNING_RATE", DEFAULT_LEARNIN
 size_t Configurer::epochs = getUIntValue("EPOCHS", DEFAULT_EPOCHS);
 size_t Configurer::batch_size = getUIntValue("BATCH_SIZE", DEFAULT_BATCH_SIZE);
 size_t Configurer::cropping_size = getUIntValue("CROPPING_SIZE", DEFAULT_CROPPING_SIZE);
-bool Configurer::hook = false;
+bool Configurer::hook = getBoolValue("HOOK_ENABLED", DEFAULT_HOOK_ENABLED
+);
+bool Configurer::track_grads = getBoolValue("TRACK_GRADS", DEFAULT_TRACK_GRADS);
+std::string Configurer::target = getStringValue("TARGET", DEFAULT_TARGET);

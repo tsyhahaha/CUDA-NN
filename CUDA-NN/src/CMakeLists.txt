@@ -44,8 +44,9 @@ add_custom_target(test
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
 
+set(SAVE_DIR /home/tsyhahaha/best_model)
 add_custom_target(train
-    COMMAND train1
+    COMMAND train1 ${SAVE_DIR}
     DEPENDS train1
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )

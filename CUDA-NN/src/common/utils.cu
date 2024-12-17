@@ -108,6 +108,20 @@ void printM(float* weight, const std::vector<size_t> shape) {
 }
 
 
+void save_vector_to_txt(std::string& filename, std::vector<float>& data) {
+    std::ofstream file(filename);
+    if (file) {
+        for (const float& value : data) {
+            file << value << "\n";
+        }
+        file.close();
+        DEBUG_PRINT("Save %s\n", filename.c_str());
+    } else {
+        ERROR("Unable to open file: %s\n", filename.c_str());
+    }
+}
+
+
 void randomFloatMatrix(float* data, int len, float min, float max) {
     std::random_device rd;
     std::mt19937 gen(rd());

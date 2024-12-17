@@ -138,14 +138,13 @@ Tensor* Encoder::forward(Tensor* data, Tensor* mask) {
     p_trans->transpose(2, 1);           // (N, L, 3)->(N, 3, L)
 
     Tensor* x;
-    feat = bn1->forward(conv1->forward(p_trans));  //(N, 64, L)
-    // this->feat->copyFrom(x);
+    this->feat = bn1->forward(conv1->forward(p_trans));  //(N, 64, L)
 
     if(this->feature_transform) {
         trans_feat = fstn->forward(feat, mask);
         feat->transpose(2, 1);     // (N, L, 64)
         feat->bmm(f_trans, trans_feat);    // (N, L, 64) @ (N, 64, 64)->(N, L, 64)
-        feat->transpose(2, 1);
+        feat->transpose(2, 1);      // (N, 64, L)
         f_trans->transpose(2, 1);       // (N, L, 64) -> (N, 64, L)
         x = f_trans;
     }
@@ -177,26 +176,49 @@ Tensor* Encoder::backward(Tensor* gradients) {
     dim3 block(BLOCK_SIZE3D, BLOCK_SIZE3D, BATCH_BASE);
     dim3 grid((L-1)/BLOCK_SIZE3D+1, (C-1)/BLOCK_SIZE3D+1, (N-1)/BATCH_BASE+1);
     max_gradients->reset({N, C, L});
+
+    printShape(gradients->getShape());
+    printShape(max_index->getShape());
+
     kMaxBackprop<<<grid, block>>>(gradients->getData(), max_gradients->getData(), max_index->getData(), N, C, L); CHECK_KERNEL();
+    
+    save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "max_d_out.txt", gradients->toVec());
+    save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "max_d_in.txt", max_gradients->toVec());
+    save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "max_index.txt", max_index->toVec());
 
     Tensor* g = conv3->backward(bn3->backward(max_gradients));
     g = conv2->backward(bn2->backward(g));  // f_trans_gradient:(N, 64, L)
+
+    Tensor* feat_d_out = g;
 
     if(feature_transform) {
         f_gradients->reset({N, 64, L});
         trans_feat_gradients->reset({N, 64, 64});
 
-        trans_feat->bmm(f_gradients, g);    // (N, 64, 64) x (N, 64, L)->(N, 64, L)
+        trans_feat->bmm(f_gradients, feat_d_out);    // (N, 64, 64) x (N, 64, L)->(N, 64, L)
 
-        g->transpose(2, 1);   // (N, 64, L) -> (N, L, 64)
-        feat->bmm(trans_feat_gradients, g);  // (N, 64, L) x (N, L, 64)->(N, 64, 64)
+        feat_d_out->transpose(2, 1);   // (N, 64, L) -> (N, L, 64)
+        feat->bmm(trans_feat_gradients, feat_d_out);  // (N, 64, L) x (N, L, 64)->(N, 64, 64)
+        feat_d_out->transpose(2, 1);   // (N, 64, L) -> (N, L, 64)
 
         g = fstn->backward(trans_feat_gradients);   // (N, 64, L)
         g->add_(f_gradients);
     }
+    
     g = conv1->backward(bn1->backward(g));  // (N, 3, L)
     g->bmm(trans_points_gradients, input); // (N, 3, L) x (N, L, 3)->(N, 3, 3)
     stn->backward(trans_points_gradients);
+
+    if(Configurer::track_grads) {
+        save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "trans_feat.txt", trans_feat->toVec());
+        save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "feat_d_out.txt", feat_d_out->toVec());
+        save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "d_feat.txt", f_gradients->toVec());
+        save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "feat.txt", feat->toVec());
+        save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "d_trans_feat.txt", trans_feat_gradients->toVec());
+        save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "point_d_out.txt", g->toVec());
+        save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "in.txt", input->toVec());  
+        save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "d_trans_point.txt", trans_points_gradients->toVec());  
+    }
 
     return nullptr; // no need to backward on input points
 }

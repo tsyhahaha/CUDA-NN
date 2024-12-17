@@ -1,0 +1,102 @@
+fc1:
+  in_features: 1024
+  out_features: 512
+fc2:
+  in_features: 512
+  out_features: 256
+fc3: 
+  in_features: 256
+  out_features: 10
+bn1:
+  dim: 2
+  num_features: 512
+bn2: 
+  dim: 2
+  num_features: 256
+feat:
+  conv1:
+    in_channels: 3
+    out_channels: 64
+  conv2:
+    in_channels: 64
+    out_channels: 128
+  conv3:
+    in_channels: 128
+    out_channels: 1024
+  bn1:
+    dim: 3
+    num_features: 64
+  bn2:
+    dim: 3
+    num_features: 128
+  bn3:
+    dim: 3
+    num_features: 1024
+  stn:
+    conv1:
+      in_channels: 3
+      out_channels: 64
+    conv2:
+      in_channels: 64
+      out_channels: 128
+    conv3:
+      in_channels: 128
+      out_channels: 1024
+    fc1:
+      in_features: 1024
+      out_features: 512
+    fc2:
+      in_features: 512
+      out_features: 256
+    fc3:
+      in_features: 256
+      out_features: 9
+    bn1:
+      dim: 3
+      num_features: 64
+    bn2:
+      dim: 3
+      num_features: 128
+    bn3:
+      dim: 3
+      num_features: 1024
+    bn4:
+      dim: 2
+      num_features: 512
+    bn5:
+      dim: 2
+      num_features: 256
+  fstn:
+    conv1:
+      in_channels: 64
+      out_channels: 64
+    conv2:
+      in_channels: 64
+      out_channels: 128
+    conv3:
+      in_channels: 128
+      out_channels: 1024
+    fc1:
+      in_features: 1024
+      out_features: 512
+    fc2:
+      in_features: 512
+      out_features: 256
+    fc3:
+      in_features: 256
+      out_features: 4096
+    bn1:
+      dim: 3
+      num_features: 64
+    bn2:
+      dim: 3
+      num_features: 128
+    bn3:
+      dim: 3
+      num_features: 1024
+    bn4:
+      dim: 2
+      num_features: 512
+    bn5:
+      dim: 2
+      num_features: 256

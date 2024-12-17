@@ -13,10 +13,14 @@
 #define TM 4
 #define TN 4
 
-#define DEFAULT_LEARNING_RATE 1e-5
+#define DEFAULT_LEARNING_RATE 1e-2
 #define DEFAULT_EPOCHS 100
 #define DEFAULT_BATCH_SIZE 4
 #define DEFAULT_CROPPING_SIZE 20000
+
+#define DEFAULT_HOOK_ENABLED false
+#define DEFAULT_TRACK_GRADS true
+#define DEFAULT_TARGET "linear"
 
 #include<vector>
 #include<string>
@@ -29,6 +33,9 @@ private:
     static int getIntValue(std::string variableName, int defaultValue);
     static float getFloatValue(std::string variableName, float defaultValue);
     static std::string getStringValue(std::string variableName, std::string defaultValue);
+
+    static bool getBoolValue(std::string variableName, bool defaultValue);
+    
     static std::map<std::string, std::vector<float>> global_weight_map;
 
 public:
@@ -37,6 +44,8 @@ public:
     static size_t batch_size;
     static size_t cropping_size;
     static bool hook;
+    static bool track_grads;
+    static std::string target;
 
     // CUDA sizes
     static std::vector<float>& getWeights(std::string name);

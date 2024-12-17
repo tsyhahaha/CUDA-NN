@@ -1,20 +1,24 @@
-# if change targe/name, please check the mode!
-target: model
-name: pointnet
+# if change targe/name, please check the `mode`!
+target: layer  # op, layer, model
+name: batchnorm1d
+is_training: false
 
-param_path: /home/taosiyuan/cudaCode/best_model/
-data_dir: /home/taosiyuan/cudaCode/CUDA-NN/data
+param_path: /home/tsyhahaha/default/feat.stn.bn5
+data_dir: /home/tsyhahaha/CUDA-NN/data/
 data_num: 10
 
-mode: test # test, regenerate, beat
+mode: regenerate # test, regenerate, beat
 
 linear:
-  in_features: 256
-  out_features: 4096
+  in_features: 1024
+  out_features: 512
 
 batchnorm1d:
   in_channels: 256
 
 conv1d:
-  in_channels: 64
-  out_channels: 64
+  in_channels:  128
+  out_channels: 1024
+
+pointnet:
+  argmax: true

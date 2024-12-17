@@ -50,10 +50,10 @@ void kConv1d_v1(float* d_in, float* d_out, float* weights, float* bias, int C_in
     // weights(C_out x C_in) @ d_in(B x C_in x L) + bias(C_out)= (B x C_out x L)
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
-    int batch = blockIdx.z * blockDim.z + threadIdx.z;
+    int batch = blockIdx.z;
 
     __shared__ float ds_A[BLOCK_SIZE3D][TILE_SIZE];
-    __shared__ float ds_B[BATCH_BASE][TILE_SIZE][BLOCK_SIZE3D];
+    __shared__ float ds_B[TILE_SIZE][BLOCK_SIZE3D];
 
     if(batch >= N) return;
 
@@ -73,16 +73,16 @@ void kConv1d_v1(float* d_in, float* d_out, float* weights, float* bias, int C_in
 
         if(col < L && threadIdx.y < TILE_SIZE) {
             if(p*TILE_SIZE + threadIdx.y < C_in){
-                ds_B[threadIdx.z][threadIdx.y][threadIdx.x] = d_in[offset_in + (p*TILE_SIZE + threadIdx.y)*L + col];
+                ds_B[threadIdx.y][threadIdx.x] = d_in[offset_in + (p*TILE_SIZE + threadIdx.y)*L + col];
             } else {
-                ds_B[threadIdx.z][threadIdx.y][threadIdx.x] = 0.0f;
+                ds_B[threadIdx.y][threadIdx.x] = 0.0f;
             }
         }
         __syncthreads();
 
         for (int i=0; i<TILE_SIZE; i++) {
             // constant: ds_A's x , ds_B's y
-            cVal += ds_A[threadIdx.y][i] * ds_B[threadIdx.z][i][threadIdx.x];
+            cVal += ds_A[threadIdx.y][i] * ds_B[i][threadIdx.x];
         }
         __syncthreads();
     }
@@ -95,12 +95,10 @@ void kConv1d_v2(float* d_in, float* d_out, float* weights, float* bias, int C_in
     // weights(C_out x C_in) @ d_in(B x C_in x L) + bias(C_out)= (B x C_out x L)
     int row = (blockIdx.y * blockDim.y + threadIdx.y)*TM;
     int col = (blockIdx.x * blockDim.x + threadIdx.x)*TN;
-    int batch = blockIdx.z * blockDim.z + threadIdx.z;
-
-    if(batch >= N) return;
+    int batch = blockIdx.z;
 
     __shared__ float ds_A[BLOCK_SIZE3D * TM][TILE_SIZE];
-    __shared__ float ds_B[BATCH_BASE][TILE_SIZE][BLOCK_SIZE3D * TN];
+    __shared__ float ds_B[TILE_SIZE][BLOCK_SIZE3D * TN];
 
     float tie[TM][TN] = {0.0f};
     float reg_A[TM] = {0.0f};
@@ -109,10 +107,12 @@ void kConv1d_v2(float* d_in, float* d_out, float* weights, float* bias, int C_in
     uint offset_in = batch * C_in * L;
     uint offset_out = batch * C_out * L;
 
+    if(batch >= N) return;
+
     int phase = (C_in - 1) / TILE_SIZE + 1;
     for(int p=0; p<phase;p++) {
         for(int i=0; i<TM; i++) {
-            if(threadIdx.z == 0 && threadIdx.x < TILE_SIZE) {
+            if(threadIdx.x < TILE_SIZE) {
                 if(row+i < C_out && p*TILE_SIZE + threadIdx.x < C_in) {
                     ds_A[threadIdx.y*TM+i][threadIdx.x] = weights[(row+i) * C_in + p*TILE_SIZE + threadIdx.x];
                 } else {
@@ -124,9 +124,9 @@ void kConv1d_v2(float* d_in, float* d_out, float* weights, float* bias, int C_in
         for(int j=0; j<TN; j++) {
             if(threadIdx.y < TILE_SIZE) {
                 if (col + j < L && p*TILE_SIZE + threadIdx.y < C_in) {
-                    ds_B[threadIdx.z][threadIdx.y][threadIdx.x*TN + j] = d_in[offset_in + (p*TILE_SIZE + threadIdx.y)*L + col + j];
+                    ds_B[threadIdx.y][threadIdx.x*TN + j] = d_in[offset_in + (p*TILE_SIZE + threadIdx.y)*L + col + j];
                 } else {
-                    ds_B[threadIdx.z][threadIdx.y][threadIdx.x*TN + j] = 0.0f;
+                    ds_B[threadIdx.y][threadIdx.x*TN + j] = 0.0f;
                 }
             }
         }
@@ -144,7 +144,7 @@ void kConv1d_v2(float* d_in, float* d_out, float* weights, float* bias, int C_in
 
             for(int j=0; j<TN; j++) {
                 if(col + j < L) {
-                    reg_B[j] = ds_B[threadIdx.z][k][threadIdx.x * TN + j];
+                    reg_B[j] = ds_B[k][threadIdx.x * TN + j];
                 } else {
                     reg_B[j] = 0.0f;
                 }
@@ -175,12 +175,12 @@ void kConv1d_v3(float* d_in, float* d_out, float* weights, float* bias, int C_in
     // weights(C_out x C_in) @ d_in(B x C_in x L) + bias(C_out)= (B x C_out x L)
     int row = (blockIdx.y * blockDim.y + threadIdx.y)*TM;
     int col = (blockIdx.x * blockDim.x + threadIdx.x)*TN;
-    int batch = blockIdx.z * blockDim.z + threadIdx.z;
+    int batch = blockIdx.z;
 
     if(batch >= N) return;
 
     __shared__ float ds_w[TILE_SIZE][BLOCK_SIZE3D * TM];
-    __shared__ float ds_in[BATCH_BASE][TILE_SIZE][BLOCK_SIZE3D * TN];
+    __shared__ float ds_in[TILE_SIZE][BLOCK_SIZE3D * TN];
 
     float tie[TM][TN] = {0.0f};
     float reg_w[TM] = {0.0f};
@@ -193,7 +193,7 @@ void kConv1d_v3(float* d_in, float* d_out, float* weights, float* bias, int C_in
     int phase = (C_in - 1) / TILE_SIZE + 1;
     for(int p=0; p<phase;p++) {
         for(int i=0; i<TM; i++) {
-            if(threadIdx.z == 0 && threadIdx.x*4 < TILE_SIZE) {
+            if(threadIdx.x*4 < TILE_SIZE) {
                 if(row+i < C_out && p*TILE_SIZE + threadIdx.x*4 < C_in) {
                     FETCH_FLOAT4(tmp[0]) = FETCH_FLOAT4(weights[(row+i) * C_in + p*TILE_SIZE + threadIdx.x*4]);
 
@@ -201,15 +201,11 @@ void kConv1d_v3(float* d_in, float* d_out, float* weights, float* bias, int C_in
                     ds_w[threadIdx.x*4+1][threadIdx.y*TM+i] = tmp[1];
                     ds_w[threadIdx.x*4+2][threadIdx.y*TM+i] = tmp[2];
                     ds_w[threadIdx.x*4+3][threadIdx.y*TM+i] = tmp[3];
-
-                    // ds_w[threadIdx.y*TM+i][threadIdx.x] = weights[(row+i) * C_in + p*TILE_SIZE + threadIdx.x];
                 } else {
                     ds_w[threadIdx.x*4+0][threadIdx.y*TM+i] = 0.0f;
                     ds_w[threadIdx.x*4+1][threadIdx.y*TM+i] = 0.0f;
                     ds_w[threadIdx.x*4+2][threadIdx.y*TM+i] = 0.0f;
                     ds_w[threadIdx.x*4+3][threadIdx.y*TM+i] = 0.0f;
-
-                    // ds_w[threadIdx.y*TM+i][threadIdx.x] = 0.0f;
                 }
             }
         }
@@ -218,12 +214,12 @@ void kConv1d_v3(float* d_in, float* d_out, float* weights, float* bias, int C_in
         for(int j=0; j<TN/4; j++) {
             if(threadIdx.y < TILE_SIZE) {
                 if (col + j*4 < L && p*TILE_SIZE + threadIdx.y < C_in) {
-                    FETCH_FLOAT4(ds_in[threadIdx.z][threadIdx.y][threadIdx.x*TN + j*4]) = FETCH_FLOAT4(d_in[offset_in + (p*TILE_SIZE + threadIdx.y)*L + col + j*4]);
+                    FETCH_FLOAT4(ds_in[threadIdx.y][threadIdx.x*TN + j*4]) = FETCH_FLOAT4(d_in[offset_in + (p*TILE_SIZE + threadIdx.y)*L + col + j*4]);
                 } else {
-                    ds_in[threadIdx.z][threadIdx.y][threadIdx.x*TN + j*4 + 0] = 0.0f;
-                    ds_in[threadIdx.z][threadIdx.y][threadIdx.x*TN + j*4 + 1] = 0.0f;
-                    ds_in[threadIdx.z][threadIdx.y][threadIdx.x*TN + j*4 + 2] = 0.0f;
-                    ds_in[threadIdx.z][threadIdx.y][threadIdx.x*TN + j*4 + 3] = 0.0f;
+                    ds_in[threadIdx.y][threadIdx.x*TN + j*4 + 0] = 0.0f;
+                    ds_in[threadIdx.y][threadIdx.x*TN + j*4 + 1] = 0.0f;
+                    ds_in[threadIdx.y][threadIdx.x*TN + j*4 + 2] = 0.0f;
+                    ds_in[threadIdx.y][threadIdx.x*TN + j*4 + 3] = 0.0f;
                 }
             }
         }
@@ -238,7 +234,7 @@ void kConv1d_v3(float* d_in, float* d_out, float* weights, float* bias, int C_in
 
             for(int j=0; j<TN/4; j++) {
                 if(col + j*4 < L) {
-                    FETCH_FLOAT4(reg_in[j*4]) = FETCH_FLOAT4(ds_in[threadIdx.z][k][threadIdx.x * TN + j*4]);
+                    FETCH_FLOAT4(reg_in[j*4]) = FETCH_FLOAT4(ds_in[k][threadIdx.x * TN + j*4]);
                 }
             }
             __syncthreads();
@@ -275,19 +271,18 @@ void kConv1d_v3(float* d_in, float* d_out, float* weights, float* bias, int C_in
 __global__
 void kConv1d_back_v2(float* gradients, float* d_in, float* weights, int C_in, int C_out, int L, int N) {
     // W.T(C_in, C_out) @ gradients(N, C_out, L) @  = d_in(N, C_in, L)
-    // weights(C_out x C_in) @ input(B x C_in x L) + bias(C_out)= (B x C_out x L)
     int row = (blockIdx.y * blockDim.y + threadIdx.y)*TM;
     int col = (blockIdx.x * blockDim.x + threadIdx.x)*TN;
-    int batch = blockIdx.z * blockDim.z + threadIdx.z;
-
-    if(batch >= N) return;
+    int batch = blockIdx.z;
 
     __shared__ float ds_A[BLOCK_SIZE3D * TM][TILE_SIZE];
-    __shared__ float ds_B[BATCH_BASE][TILE_SIZE][BLOCK_SIZE3D * TN];
+    __shared__ float ds_B[TILE_SIZE][BLOCK_SIZE3D * TN];
 
     float tie[TM][TN] = {0.0f};
     float reg_A[TM] = {0.0f};
     float reg_B[TN] = {0.0f};
+
+    if(batch >= N) return;
 
     uint offset_in = batch * C_out * L;
     uint offset_out = batch * C_in * L;
@@ -295,9 +290,10 @@ void kConv1d_back_v2(float* gradients, float* d_in, float* weights, int C_in, in
     int phase = (C_out - 1) / TILE_SIZE + 1;
     for(int p=0; p<phase;p++) {
         for(int i=0; i<TM; i++) {
-            if(threadIdx.z == 0 && threadIdx.x < TILE_SIZE) {
-                if(row+i < C_in && p*TILE_SIZE + threadIdx.x < C_out) {
-                    ds_A[threadIdx.y*TM+i][threadIdx.x] = weights[(row+i) * C_out + p*TILE_SIZE + threadIdx.x];
+            if(threadIdx.x < TILE_SIZE) {
+                if(row + i < C_in && p*TILE_SIZE + threadIdx.x < C_out) {
+                    // weights[C_out][C_in]
+                    ds_A[threadIdx.y*TM+i][threadIdx.x] = weights[(p*TILE_SIZE + threadIdx.x) * C_in + row + i];
                 } else {
                     ds_A[threadIdx.y*TM+i][threadIdx.x] = 0.0f;
                 }
@@ -306,15 +302,14 @@ void kConv1d_back_v2(float* gradients, float* d_in, float* weights, int C_in, in
 
         for(int j=0; j<TN; j++) {
             if(threadIdx.y < TILE_SIZE) {
-                if (col + j < L && p*TILE_SIZE + threadIdx.y < C_in) {
-                    ds_B[threadIdx.z][threadIdx.y][threadIdx.x*TN + j] = d_in[offset_in + (p*TILE_SIZE + threadIdx.y)*L + col + j];
+                if (col + j < L && p*TILE_SIZE + threadIdx.y < C_out) {
+                    ds_B[threadIdx.y][threadIdx.x*TN + j] = gradients[offset_in + (p*TILE_SIZE + threadIdx.y)*L + col + j];
                 } else {
-                    ds_B[threadIdx.z][threadIdx.y][threadIdx.x*TN + j] = 0.0f;
+                    ds_B[threadIdx.y][threadIdx.x*TN + j] = 0.0f;
                 }
             }
         }
         __syncthreads();
-        
 
         for (int k=0; k<TILE_SIZE; k++) {
             for (int i=0; i<TM; i++) {
@@ -327,7 +322,7 @@ void kConv1d_back_v2(float* gradients, float* d_in, float* weights, int C_in, in
 
             for(int j=0; j<TN; j++) {
                 if(col + j < L) {
-                    reg_B[j] = ds_B[threadIdx.z][k][threadIdx.x * TN + j];
+                    reg_B[j] = ds_B[k][threadIdx.x * TN + j];
                 } else {
                     reg_B[j] = 0.0f;
                 }
@@ -336,7 +331,6 @@ void kConv1d_back_v2(float* gradients, float* d_in, float* weights, int C_in, in
 
             for(int j=0; j<TN; j++) {
                 for (int i=0; i<TM; i++) {
-                    // if(col + j < L && row + i < C_out)
                     tie[i][j] += reg_A[i] * reg_B[j];
                 }
             }
@@ -434,20 +428,61 @@ void kConv1d_back_v3(float* gradients, float* d_in, float* weights, int C_in, in
 }
 
 __global__
-void kBackprop_to_weights_and_bias(
-    float* gradients, float* input, float* d_weights, float* d_bias, size_t N, size_t C_out, size_t C_in, size_t L
+void kBackprop_to_bias(
+    float* gradients, float* d_bias, size_t N, size_t C_out, size_t L
 ) {
-    // A (N x C_out x L) @ B (N x L x C_in) = C (B x C_out x C_in)
+    float d_bias_acc = 0.0f;
+    int row = threadIdx.y + blockIdx.y * blockDim.y;
+    int batch = blockIdx.z;
+    int tid = threadIdx.x;
+
+    __shared__ float sd_M[BATCH_BASE][BLOCK_SIZE1D];
+
+    if(batch >= N || row >= C_out) return;
+
+    int offset = batch * C_out * L;
+    int phase = (L-1)/BLOCK_SIZE1D + 1;
+    for(int p=0; p<phase; p++) {
+        int col = tid + p * BLOCK_SIZE1D;
+        if(col < L) {
+            sd_M[threadIdx.y][tid] = gradients[offset + row * L + col];
+        } else {
+            sd_M[threadIdx.y][tid] = 0.0f;
+        }
+        __syncthreads();
+
+        for(int stride=BLOCK_SIZE1D/2; stride>0; stride>>=1) {
+            if(tid < stride && tid + stride + p*BLOCK_SIZE1D < L) {
+                sd_M[threadIdx.y][tid] += sd_M[threadIdx.y][tid + stride];
+            }
+            __syncthreads();
+        }
+
+        if(tid==0) {
+            d_bias_acc += sd_M[threadIdx.y][0];
+        }
+    }
+
+    if(tid == 0) {
+        atomicAdd(&d_bias[row], d_bias_acc);
+    }
+
+}
+
+__global__
+void kBackprop_to_weights(
+    float* gradients, float* input, float* d_weights, size_t N, size_t C_out, size_t C_in, size_t L
+) {
+    // gradients(N x C_out x L) @ input(N x C_in x L) = C (B x C_out x C_in)
     float cVal = 0.0f;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     int row = blockIdx.y * blockDim.y + threadIdx.y;
-    int batch = blockIdx.z * blockDim.z + threadIdx.z;
+    int batch = blockIdx.z;
 
-    // if(batch >= N || row >= C_out || col >= C_in) return;
+    __shared__ float ds_A[BLOCK_SIZE2D][TILE_SIZE];
+    __shared__ float ds_B[BLOCK_SIZE2D][TILE_SIZE];
+
     if(batch >= N) return;
-
-    __shared__ float ds_A[BATCH_BASE][BLOCK_SIZE2D][TILE_SIZE];
-    __shared__ float ds_B[BATCH_BASE][TILE_SIZE][BLOCK_SIZE2D];
 
     int offset1 = batch * C_out * L;
     int offset2 = batch * L * C_in;
@@ -455,42 +490,29 @@ void kBackprop_to_weights_and_bias(
     for(int p=0; p<phase; p++) {
         if (threadIdx.x < TILE_SIZE) {
             if(row < C_out && p*TILE_SIZE + threadIdx.x < L) {
-                ds_A[threadIdx.z][threadIdx.y][threadIdx.x] = gradients[offset1 + row*L + p*TILE_SIZE + threadIdx.x];
+                ds_A[threadIdx.y][threadIdx.x] = gradients[offset1 + row*L + p*TILE_SIZE + threadIdx.x];
             } else {
-                ds_A[threadIdx.z][threadIdx.y][threadIdx.x] = 0.0f;
+                ds_A[threadIdx.y][threadIdx.x] = 0.0f;
             }
         }
 
-        if(threadIdx.y < TILE_SIZE) {
+        if(threadIdx.y < TILE_SIZE){
             if(col < C_in && p*TILE_SIZE + threadIdx.y < L) {
-                ds_B[threadIdx.z][threadIdx.y][threadIdx.x] = input[offset2 + (p*TILE_SIZE + threadIdx.y)*C_in + col];
+                ds_B[threadIdx.x][threadIdx.y] = input[offset2 + col*L + (p*TILE_SIZE + threadIdx.y)];
             } else {
-                ds_B[threadIdx.z][threadIdx.y][threadIdx.x] = 0.0f;
+                ds_B[threadIdx.x][threadIdx.y] = 0.0f;
             }
         }
-
         __syncthreads();
+
         for (int i=0; i<TILE_SIZE; i++) {
-            // constant: ds_A's x , ds_B's y
-            cVal += ds_A[threadIdx.z][threadIdx.y][i] * ds_B[threadIdx.z][i][threadIdx.x];
+            cVal += ds_A[threadIdx.y][i] * ds_B[threadIdx.x][i];
         }
         __syncthreads();
 
-        // accumulate to bias
-        for(int stride=TILE_SIZE/2; stride>0; stride>>=1) {
-            if(threadIdx.x < stride && threadIdx.x + stride < TILE_SIZE && threadIdx.x + stride + p*TILE_SIZE < L) {
-                ds_A[threadIdx.z][threadIdx.y][threadIdx.x] = ds_A[threadIdx.z][threadIdx.y][threadIdx.x] + ds_A[threadIdx.z][threadIdx.y][threadIdx.x + stride];
-            }
-        }
-
-        if(threadIdx.x == 0) {
-            // printf("[atomicAdd] to bias\n");
-            atomicAdd(&d_bias[row], ds_A[threadIdx.z][threadIdx.y][0]);
-        }
     }
 
     if (row < C_out && col < C_in) {
-        // printf("[atomicAdd] to weights\n");
         atomicAdd(&d_weights[row*C_in + col], cVal);
     }
 }
@@ -593,7 +615,7 @@ Tensor* Conv1d::forward(Tensor* data) {
 
     
     if(dim == 2) {
-        size_t C_in = in_channels, C_out = out_channels, L = shape_in[1];
+        size_t C_in = in_channels, C_out = out_channels, L = Configurer::cropping_size;
         dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
         dim3 grid((L-1)/BLOCK_SIZE2D+1, (C_out-1)/BLOCK_SIZE2D+1);
 
@@ -602,15 +624,12 @@ Tensor* Conv1d::forward(Tensor* data) {
         size_t C_in = in_channels, C_out = out_channels;
         size_t L = shape_in[2], N = shape_in[0];
 
-        dim3 block(BLOCK_SIZE3D, BLOCK_SIZE3D, BATCH_BASE);
-        dim3 grid((L-1)/(BLOCK_SIZE3D*TN)+1, (C_out-1)/(BLOCK_SIZE3D*TM)+1, (N-1)/BATCH_BASE + 1);
-
-        // kConv1d_v2<<<grid, block>>>(data->getData(), output->getData(), weights->getData(), bias->getData(), C_in, C_out, L, N); 
+        dim3 block(BLOCK_SIZE3D, BLOCK_SIZE3D);
+        dim3 grid((L-1)/(BLOCK_SIZE3D*TN)+1, (C_out-1)/(BLOCK_SIZE3D*TM)+1, N);
 
         if(C_in % 4 == 0 && L % 4 == 0) {
             kConv1d_v3<<<grid, block>>>(data->getData(), output->getData(), weights->getData(), bias->getData(), C_in, C_out, L, N); CHECK_KERNEL();
         } else {
-            // DEBUG_PRINT("C_in=%d, C_out=%d, N=%d\n", C_in, C_out, N);
             kConv1d_v2<<<grid, block>>>(data->getData(), output->getData(), weights->getData(), bias->getData(), C_in, C_out, L, N); CHECK_KERNEL();
         }
     } else {
@@ -624,58 +643,42 @@ Tensor* Conv1d::backward(Tensor* gradients) {
     DEBUG_PRINT("[Conv1d] %sbackward\n", this->prefix.c_str());
     DimVector shape_in = input->getShape();
     size_t N = input->getSize(0), L = Configurer::cropping_size;
-    if(input->getSize(-1) == L) {
-        input->transpose(-2, -1);
-    }
-    // gradients->bmm(d_weights, input);   // (N,C_out,L)x(N,L,C_in)
 
-    dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D, BATCH_BASE);
-    dim3 grid((in_channels-1)/BLOCK_SIZE2D+1, (out_channels-1)/BLOCK_SIZE2D+1, (N-1)/BATCH_BASE+1);
+    Tensor* d_weights = weights->getGradsAcc();
+    Tensor* d_bias = bias->getGradsAcc();
 
-    Tensor* d_weights_acc = weights->getGradsAcc();
-    Tensor* d_bias_acc = bias->getGradsAcc();
+    dim3 block2(BLOCK_SIZE1D, BATCH_BASE);
+    dim3 grid2(1, (out_channels-1)/BATCH_BASE + 1, N);
+    kBackprop_to_bias<<<grid2, block2>>>(gradients->getData(), d_bias->getData(), N, out_channels, L); CHECK_KERNEL();
 
-    // printShape(gradients->getShape());
-    // printShape(input->getShape());
-    // printShape(d_weights_acc->getShape());
-    // printShape(d_bias_acc->getShape());
-    // DEBUG_PRINT("(%d, %d, %d, %d)\n", N, out_channels, in_channels, L);
-
-    kBackprop_to_weights_and_bias<<<grid, block>>>(gradients->getData(), input->getData(), d_weights_acc->getData(), d_bias_acc->getData(), N, out_channels, in_channels, L); CHECK_KERNEL();
-
-    // d_weights->reshape({N, weights->getSize()});
-    // d_weights->sumToDim_(1);    // (N, C_out, C_in) -> (C_out, C_in)
-    // d_weights->reshape(weights->getShape());
-    // gradients->sumToDim(d_bias, 1);
-    // // accumulate grads
-    // this->weights->acc_grads(d_weights);
-    // this->bias->acc_grads(d_bias);
-
-    if(input->getShape() != shape_in) {
-        input->transpose(-2, -1);
-    }
+    dim3 block1(BLOCK_SIZE2D, BLOCK_SIZE2D);
+    dim3 grid1((in_channels-1)/BLOCK_SIZE2D+1, (out_channels-1)/BLOCK_SIZE2D+1, N);
+    kBackprop_to_weights<<<grid1, block1>>>(gradients->getData(), input->getData(), d_weights->getData(), N, out_channels, in_channels, L); CHECK_KERNEL();
 
     size_t dim = gradients->getDim();
 
-    DEBUG_PRINT("HERE4\n");
-
     if(dim == 3) {
         size_t C_in = in_channels, C_out = out_channels;
-        size_t L = shape_in[2], N = shape_in[0];
+        size_t L = Configurer::cropping_size, N = Configurer::batch_size;
         DimVector shape_o = {N, in_channels, L};
         this->d_in->reset(shape_o);
 
-        dim3 block(BLOCK_SIZE3D, BLOCK_SIZE3D, BATCH_BASE);
-        dim3 grid((L-1)/(BLOCK_SIZE3D*TN)+1, (C_out-1)/(BLOCK_SIZE3D*TM)+1, (N-1)/BATCH_BASE + 1);
-
-        if(C_in % 4 == 0 && L % 4 == 0) {
-            kConv1d_back_v3<<<grid, block>>>(gradients->getData(), d_in->getData(), weights->getData(), C_in, C_out, L, N); CHECK_KERNEL();
-        } else {
-            // DEBUG_PRINT("C_in=%d, C_out=%d, N=%d\n", C_in, C_out, N);
-            kConv1d_back_v2<<<grid, block>>>(gradients->getData(), d_in->getData(), weights->getData(), C_in, C_out, L, N); CHECK_KERNEL();
-        }
+        dim3 block(BLOCK_SIZE3D, BLOCK_SIZE3D);
+        dim3 grid((L-1)/(BLOCK_SIZE3D*TN)+1, (in_channels-1)/(BLOCK_SIZE3D*TM)+1, N);
+        
+        kConv1d_back_v2<<<grid, block>>>(gradients->getData(), d_in->getData(), weights->getData(), C_in, C_out, L, N); CHECK_KERNEL();
     } else {
         ERROR("Dimension not allowed!\n");
+    }
+
+    // Save for checking grads
+    if(Configurer::track_grads && (Configurer::target == "conv" ||  Configurer::target == "all")) {
+        save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "d_out.txt", gradients->toVec());
+        save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "in.txt", input->toVec());
+        save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "weights.txt", weights->toVec());
+        save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "d_in.txt", d_in->toVec());
+        save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "d_weights.txt", d_weights->toVec());
+        save_vector_to_txt("/home/tsyhahaha/CUDA-NN/data/grads/" + this->prefix + "d_bias.txt", d_bias->toVec());
     }
 
     return this->d_in;

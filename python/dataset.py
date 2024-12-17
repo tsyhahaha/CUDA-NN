@@ -1,11 +1,17 @@
-import torch
-from torch.utils.data import Dataset
+import os
 
+import torch
+from torch.utils.data import Dataset, DataLoader
+
+import torch.nn as nn
 import torch.utils.data
+import torch.nn.functional as F
 
 import torch.nn.parallel
+from torch.autograd import Variable
 import numpy as np
 import h5py
+from tqdm import tqdm
 
 # provider
 def shift_point_cloud(batch_data, shift_range=0.1):
@@ -56,6 +62,7 @@ class PointCloudDataset(Dataset):
             for k in hf.keys():
                 self.list_of_points.append(hf[k]["points"][:].astype(np.float32))
                 self.list_of_labels.append(hf[k].attrs["label"])
+        self.fix_length_statistics_with_median()
 
     def __len__(self):
         return len(self.list_of_points)
@@ -64,33 +71,56 @@ class PointCloudDataset(Dataset):
         points = self.list_of_points[idx]
         label = self.list_of_labels[idx]
         return points, label
-    
-def pad_collate_fn(batch):
-    # padding -> chunk
-    min_size = max([item[0].shape[0] for item in batch])
-    
-    padded_batch = []
-    for points, target in batch:
-        points = points[:,]
-        padded_batch.append((points, target))
-    
-    return torch.utils.data.dataloader.default_collate(padded_batch)
 
-def inference_pad_collate_fn(batch):
-    # padding -> chunk
-    # max_size = max([item[0].shape[0] for item in batch])
-    max_size = 30000
-    
-    padded_batch = []
-    for points, target in batch:
-        points = torch.from_numpy(points)[:max_size,:]
-        pad_length = max_size - points.shape[0]
-        mask = torch.ones(max_size)
+    def fix_length_statistics_with_median(self):
+        lengths = [points.shape[0] for points in self.list_of_points]
+        fix_length = int( np.median(lengths) )
+        
+        new_list_of_points = []
+        for points in self.list_of_points:
+            if(points.shape[0] >= fix_length):
+                new_list_of_points.append(points[:fix_length, :])
+            else:
+                new_list_of_points.append(np.concatenate((points, np.zeros((fix_length - points.shape[0], 3), dtype=np.float32)), axis=0))
+        self.list_of_points = new_list_of_points
 
-        if pad_length > 0:
-            mask[points.shape[0]:] = 0
-            points = torch.nn.functional.pad(points, (0, 0, 0, pad_length), mode='constant', value=0)
-            mask = mask.to(bool)
-        padded_batch.append((points, target, mask))
+
+class PointCloudTestDataset(Dataset):
+    def __init__(self, list_of_points, list_of_labels):
+        self.list_of_points = []
+        self.list_of_labels = []
+
+        self.list_of_labels = list_of_labels
+        self.list_of_points = list_of_points
+
+        self.fix_length_statistics_with_median()
+
+    def __len__(self):
+        return len(self.list_of_points)
+
+    def __getitem__(self, idx):
+        points = self.list_of_points[idx]
+        label = self.list_of_labels[idx]
+        return points, label
+
+    def fix_length_statistics_with_median(self):
+        lengths = [points.shape[0] for points in self.list_of_points]
+        fix_length = int(np.median(lengths))
+        
+        new_list_of_points = []
+        for points in self.list_of_points:
+            if(points.shape[0] >= fix_length):
+                new_list_of_points.append(points[:fix_length, :])
+            else:
+                new_list_of_points.append(np.concatenate((points, np.zeros((fix_length - points.shape[0], 3), dtype=np.float32)), axis=0))
+        self.list_of_points = new_list_of_points
+
+def save_model_params_and_buffers_to_txt(model, directory):
+    if not os.path.exists(directory):
+        os.makedirs(directory)
     
-    return torch.utils.data.dataloader.default_collate(padded_batch)
+    for name, param in model.named_parameters():
+        np.savetxt(os.path.join(directory, f'{name}.txt'), param.detach().cpu().numpy().flatten())
+    
+    for name, buffer in model.named_buffers():
+        np.savetxt(os.path.join(directory, f'{name}.txt'), buffer.detach().cpu().numpy().flatten())

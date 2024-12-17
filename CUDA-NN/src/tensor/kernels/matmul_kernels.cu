@@ -186,46 +186,45 @@ void kBatchMatmul3D(
     float cVal = 0.0f;
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
+    int b = blockIdx.z;
 
-    if(row >= M || col >= K) return;
+    if(b >= B || row >= M || col >= K) return;
 
     __shared__ float ds_A[BLOCK_SIZE2D][TILE_SIZE];
     __shared__ float ds_B[TILE_SIZE][BLOCK_SIZE2D];
 
-    for(int b=0; b<B; b++) {
-        cVal = 0.0f;
-        int offset1 = b * M * N;
-        int offset2 = b * N * K;
-        int offset3 = b * M * K;
-        int phase = (N - 1) / TILE_SIZE + 1;
-        for(int p=0; p<phase; p++) {
-            if (row < M  && threadIdx.x < TILE_SIZE) {
-                if(p*TILE_SIZE + threadIdx.x < N) {
-                    ds_A[threadIdx.y][threadIdx.x] = d_A[offset1 + row*N + p*TILE_SIZE + threadIdx.x];
-                } else {
-                    ds_A[threadIdx.y][threadIdx.x] = 0.0f;
-                }
-            }
+    int offset1 = b* M * N;
+    int offset2 = b * N * K;
+    int offset3 = b * M * K;
 
-            if(col < K && threadIdx.y < TILE_SIZE) {
-                if(p*TILE_SIZE + threadIdx.y < N) {
-                    ds_B[threadIdx.y][threadIdx.x] = d_B[offset2 + (p*TILE_SIZE + threadIdx.y)*K + col];
-                } else {
-                    ds_B[threadIdx.y][threadIdx.x] = 0.0f;
-                }
+    int phase = (N - 1) / TILE_SIZE + 1;
+    for(int p=0; p<phase; p++) {
+        if (threadIdx.x < TILE_SIZE) {
+            if(row < M  && p*TILE_SIZE + threadIdx.x < N) {
+                ds_A[threadIdx.y][threadIdx.x] = d_A[offset1 + row*N + p*TILE_SIZE + threadIdx.x];
+            } else {
+                ds_A[threadIdx.y][threadIdx.x] = 0.0f;
             }
-
-            __syncthreads();
-            for (int i=0; i<TILE_SIZE; i++) {
-                // constant: ds_A's x , ds_B's y
-                cVal += ds_A[threadIdx.y][i] * ds_B[i][threadIdx.x];
-            }
-            __syncthreads();
         }
 
-        if (row < M && col < K) {
-            d_out[offset3 + row*K + col] = cVal;
+        if(threadIdx.y < TILE_SIZE) {
+            if(col < K && p*TILE_SIZE + threadIdx.y < N) {
+                ds_B[threadIdx.y][threadIdx.x] = d_B[offset2 + (p*TILE_SIZE + threadIdx.y)*K + col];
+            } else {
+                ds_B[threadIdx.y][threadIdx.x] = 0.0f;
+            }
         }
+
+        __syncthreads();
+        for (int i=0; i<TILE_SIZE; i++) {
+            // constant: ds_A's x , ds_B's y
+            cVal += ds_A[threadIdx.y][i] * ds_B[i][threadIdx.x];
+        }
+        __syncthreads();
+    }
+
+    if (row < M && col < K) {
+        d_out[offset3 + row*K + col] = cVal;
     }
 }
 

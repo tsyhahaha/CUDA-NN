@@ -1,5 +1,4 @@
 #include "pointnet.cuh"
-#include "configure.cuh"
 
 PointNet::PointNet(std::string prefix, size_t k, bool normal_channel){
     size_t channel;
@@ -120,7 +119,6 @@ Tensor* PointNet::forward(Tensor* data, Tensor* mask) {
 
 Tensor* PointNet::backward(Tensor* gradients) {
     Tensor* d_o = softmax->backward(gradients);
-
     d_o = fc3->backward(d_o);
     d_o = fc2->backward(bn2->backward(d_o));
     d_o = fc1->backward(bn1->backward(d_o));

@@ -65,6 +65,10 @@ Tensor::~Tensor(){
     }
 }
 
+bool Tensor::is_train() {
+    return this->is_training;
+}
+
 void Tensor::train() {
     this->is_training = true;
     if(!this->gradients_acc) {
@@ -468,7 +472,7 @@ Tensor* Tensor::sumToDim(Tensor*& tensor_o, int dim){
         } tensor_o->reset(shape_o);
 
         dim3 block(BLOCK_SIZE1D, BATCH_BASE);
-        dim3 grid((C*L-1)/BLOCK_SIZE1D + 1);
+        dim3 grid((C*L-1)/BLOCK_SIZE1D + 1, 1);
         kBatchReduce2D<<<grid, block>>>(this->getData(), tensor_o->getData(), N, C*L, false);CHECK_KERNEL();
 
         int block_sub = BLOCK_SIZE1D;
@@ -521,7 +525,7 @@ Tensor* Tensor::sumToDim_(int dim){
         size_t N = shape[0], C = shape[1];
         DimVector shape_o = {C};
         dim3 block(BLOCK_SIZE1D, BATCH_BASE);
-        dim3 grid((C-1)/BLOCK_SIZE1D + 1);
+        dim3 grid((C-1)/BLOCK_SIZE1D + 1, 1);
         kBatchReduce2D<<<grid, block>>>(d_data, d_data, N, C, false);CHECK_KERNEL();
         this->shape = shape_o;
     } else if(size==2 && dim == 0) {
@@ -553,7 +557,7 @@ Tensor* Tensor::sumToDim_(int dim){
     }
     return this;
 }
- 
+
 float Tensor::mean(){
     float s = sum();
     return s/this->getSize();
@@ -1195,7 +1199,7 @@ Tensor* Tensor::bmm(Tensor* tensor) {
     Tensor* tensor_o = new Tensor({bz, M, K});
 
     dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
-    dim3 grid((K-1)/BLOCK_SIZE2D +1, (M-1)/BLOCK_SIZE2D+1);
+    dim3 grid((K-1)/BLOCK_SIZE2D +1, (M-1)/BLOCK_SIZE2D+1, bz);
 
     kBatchMatmul3D<<<grid, block>>>(this->d_data, tensor->d_data, tensor_o->d_data, bz, M, N, K); CHECK_KERNEL();
 
@@ -1224,10 +1228,8 @@ void Tensor::bmm(Tensor*& output, Tensor* tensor) {
     }
 
     dim3 block(BLOCK_SIZE2D, BLOCK_SIZE2D);
-    dim3 grid((K-1)/BLOCK_SIZE2D +1, (M-1)/BLOCK_SIZE2D+1);
+    dim3 grid((K-1)/BLOCK_SIZE2D +1, (M-1)/BLOCK_SIZE2D+1, bz);
 
-    // printShape(this->shape);
-    // printShape(tensor->shape);
     kBatchMatmul3D<<<grid, block>>>(this->d_data, tensor->d_data, output->d_data, bz, M, N, K); CHECK_KERNEL();
 }
 

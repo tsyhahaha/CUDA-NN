@@ -1,4 +1,8 @@
+import os
+
 import torch
+from torch.utils.data import Dataset, DataLoader
+
 import torch.nn as nn
 import torch.utils.data
 import torch.nn.functional as F
@@ -6,11 +10,8 @@ import torch.nn.functional as F
 import torch.nn.parallel
 from torch.autograd import Variable
 import numpy as np
-
-def inplace_relu(m):
-    classname = m.__class__.__name__
-    if classname.find('ReLU') != -1:
-        m.inplace=True
+import h5py
+from tqdm import tqdm
 
 class STN3d(nn.Module):
     def __init__(self, channel):
@@ -29,14 +30,11 @@ class STN3d(nn.Module):
         self.bn4 = nn.BatchNorm1d(512)
         self.bn5 = nn.BatchNorm1d(256)
 
-    def forward(self, x, mask=None):
+    def forward(self, x):
         batchsize = x.size()[0]
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
-        if mask is not None:
-            mask = mask.unsqueeze(1).expand_as(x)
-            x.masked_fill(~mask, float('-inf'))
         x = torch.max(x, 2, keepdim=True)[0]
         x = x.view(-1, 1024)
 
@@ -72,14 +70,11 @@ class STNkd(nn.Module):
 
         self.k = k
 
-    def forward(self, x, mask=None):
+    def forward(self, x):
         batchsize = x.size()[0]
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
-        if mask is not None:
-            mask = mask.unsqueeze(1).expand_as(x)
-            x.masked_fill(~mask, float('-inf'))
         x = torch.max(x, 2, keepdim=True)[0]
         x = x.view(-1, 1024)
 
@@ -111,9 +106,15 @@ class PointNetEncoder(nn.Module):
         if self.feature_transform:
             self.fstn = STNkd(k=64)
 
-    def forward(self, x, mask=None):
+        self.feat = None
+        self.trans_feat = None
+        self.trans_point = None
+
+    def forward(self, x):
         B, D, N = x.size()
-        trans = self.stn(x, mask)
+        trans = self.stn(x)
+        self.trans_point = trans
+        self.trans_point.retain_grad()
         x = x.transpose(2, 1)
         if D > 3:
             feature = x[:, :, 3:]
@@ -123,11 +124,16 @@ class PointNetEncoder(nn.Module):
             x = torch.cat([x, feature], dim=2)
         x = x.transpose(2, 1)
         x = F.relu(self.bn1(self.conv1(x)))
+        self.feat = x
+        self.feat.retain_grad()
+
 
         if self.feature_transform:
-            trans_feat = self.fstn(x, mask)
+            trans_feat = self.fstn(x)
             x = x.transpose(2, 1)
             x = torch.bmm(x, trans_feat)
+            self.trans_feat = trans_feat
+            self.trans_feat.retain_grad()
             x = x.transpose(2, 1)
         else:
             trans_feat = None
@@ -135,9 +141,6 @@ class PointNetEncoder(nn.Module):
         pointfeat = x
         x = F.relu(self.bn2(self.conv2(x)))
         x = self.bn3(self.conv3(x))
-        if mask is not None:
-            mask = mask.unsqueeze(1).expand_as(x)
-            x.masked_fill(~mask, float('-inf'))
         x = torch.max(x, 2, keepdim=True)[0]
         x = x.view(-1, 1024)
         if self.global_feat:
@@ -156,6 +159,7 @@ def feature_transform_reguliarzer(trans):
     return loss
 
 
+# 模型定义
 class PointNet(nn.Module):
     def __init__(self, k=10, normal_channel=False):
         super(PointNet, self).__init__()
@@ -172,22 +176,28 @@ class PointNet(nn.Module):
         self.bn2 = nn.BatchNorm1d(256)
         self.relu = nn.ReLU()
 
-    def forward(self, x, mask=None):
-        x, trans, trans_feat = self.feat(x, mask)
+    def forward(self, x):
+        x, trans, trans_feat = self.feat(x)
         x = F.relu(self.bn1(self.fc1(x)))
-        x = F.relu(self.bn2(self.dropout(self.fc2(x))))
+        x = F.relu(self.bn2(self.fc2(x)))
         x = self.fc3(x)
         x = F.log_softmax(x, dim=1)
         return x, trans_feat
 
-class Loss(torch.nn.Module):
+class PointNetLoss(torch.nn.Module):
     def __init__(self, mat_diff_loss_scale=0.001):
-        super(Loss, self).__init__()
+        super(PointNetLoss, self).__init__()
         self.mat_diff_loss_scale = mat_diff_loss_scale
 
     def forward(self, pred, target, trans_feat):
         loss = F.nll_loss(pred, target)
-        mat_diff_loss = feature_transform_regularizer(trans_feat)
+        mat_diff_loss = feature_transform_reguliarzer(trans_feat)
 
         total_loss = loss + mat_diff_loss * self.mat_diff_loss_scale
-        return total_loss
+        return total_loss, loss, mat_diff_loss
+    
+
+def inplace_relu(m):
+    classname = m.__class__.__name__
+    if classname.find('ReLU') != -1:
+        m.inplace=True

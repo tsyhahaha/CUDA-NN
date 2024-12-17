@@ -6,10 +6,13 @@
 #include<iostream>
 #include<vector>
 #include<random>
+#include <fstream>
+#include <sstream>
+#include <dirent.h>
 
 #define FP32_MIN -1e7f
 
-#define DEBUG 0
+#define DEBUG 2
 
 #if defined(DEBUG) && DEBUG >= 1
  #define DEBUG_PRINT(fmt, args...) fprintf(stderr, "[DEBUG] %s(%d):%s(): " fmt, __FILE__, __LINE__, __func__, ##args)
@@ -57,6 +60,8 @@ void setGPU(const int GPU_idx);
 float* loadWeightsFromTxt(const char* filename, std::vector<size_t> shape);
 
 void printM(float* weight, const std::vector<size_t> shape);
+
+void save_vector_to_txt(const std::string& filename, const std::vector<float>& data);
 
 void randomFloatMatrix(float* data, int len, float min, float max);
 

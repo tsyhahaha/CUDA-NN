@@ -210,12 +210,7 @@ def test_cu(cfg):
     if result.returncode != 0:
         print("[ERROR] Failed to launch the cuda program!")
         exit(-1)
-    
-    # pattern = r'Average time consumed:\s*([0-9]*\.[0-9]+) s'
-    # content = result.stdout
-    # matches = re.findall(pattern, content)
-    # for match in matches:
-    #     print(f'Extracted average time: {match}')
+
     os.chdir(cur)
     print("-"*50)
 

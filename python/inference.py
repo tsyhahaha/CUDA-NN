@@ -11,14 +11,33 @@ import torch.nn.parallel
 import numpy as np
 from tqdm import tqdm
 
-from model import PointNet, Loss, inplace_relu
-from dataset import PointCloudDataset, inference_pad_collate_fn, random_point_dropout, random_scale_point_cloud, shift_point_cloud
+from model import PointNet, inplace_relu
+from dataset import PointCloudDataset, random_point_dropout, random_scale_point_cloud, shift_point_cloud
 
 cfg = {
     'model_path': '/home/tsyhahaha/default',
     'num_class': 10,
     'batch_size': 1,
 }
+
+def inference_pad_collate_fn(batch):
+    # padding -> chunk
+    # max_size = max([item[0].shape[0] for item in batch])
+    max_size = 30000
+    
+    padded_batch = []
+    for points, target in batch:
+        points = torch.from_numpy(points)[:max_size,:]
+        pad_length = max_size - points.shape[0]
+        mask = torch.ones(max_size)
+
+        if pad_length > 0:
+            mask[points.shape[0]:] = 0
+            points = torch.nn.functional.pad(points, (0, 0, 0, pad_length), mode='constant', value=0)
+            mask = mask.to(bool)
+        padded_batch.append((points, target, mask))
+    
+    return torch.utils.data.dataloader.default_collate(padded_batch)
 
 
 def test(model, loader, num_class=10):

@@ -28,7 +28,7 @@ class Tensor {
         float* transpose_cache = nullptr;
         float* mask_cache = nullptr;
 
-        bool is_training;
+        bool is_training = false;
         Tensor* gradients_acc = nullptr;
 
     public:
@@ -40,6 +40,7 @@ class Tensor {
         Tensor(const Tensor &other);
         Tensor(std::vector<float>& data_vec, DimVector shape);
         ~Tensor();
+        bool is_train();
         void train();
         void eval();
 
@@ -95,6 +96,7 @@ class Tensor {
         Tensor* mask(Tensor* ref);
 
         float sum();
+        Tensor* sum(Tensor*& tensor_o, int dim);
         // Tensor* sum(Tensor*& tensor_o, int dim, bool keepDim=true);
         Tensor* sumToDim(Tensor*& tensor_o, int dim);
         Tensor* sumToDim_(int dim);

@@ -14,8 +14,9 @@ void kMaxBackprop(
     int offset2d = z*C+y;
     int offset3d = offset2d * L + x;
 
-    int m_idx = (int) max_index[offset2d];
+    int m_idx = (int) (max_index[offset2d] + 0.5f);
     if(x == m_idx) {
+        // printf("d_in[%d][%d][%d] = gradients[%d][%d](%f)\n", z, y, x, z, y, gradients[offset2d]);
         d_in[offset3d] = gradients[offset2d];
     } else {
         d_in[offset3d] = 0.0f;

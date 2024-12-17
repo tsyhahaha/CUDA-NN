@@ -1,118 +1,133 @@
+# 这是程序一的Python模板程序，您可以增加epoch后提交该程序而不进行任何修改（如果不在意准确率的分数），对于（加分题），请参考程序二的模板程序自行实现
+
+'''
+Package                  Version
+------------------------ ----------
+certifi                  2024.8.30
+charset-normalizer       3.3.2
+cmake                    3.30..3
+filelock                 3.16.0
+h5py                     3.11.0
+hdf5                     1.12.1
+idna                     3.8
+Jinja2                   3.1.4
+lit                      18.1.8
+MarkupSafe               2.1.5
+mpmath                   1.3.0
+networkx                 3.3
+numpy                    1.26.0
+nvidia-cublas-cu11       11.10.3.66
+nvidia-cuda-cupti-cu11   11.7.101
+nvidia-cuda-nvrtc-cu11   11.7.99
+nvidia-cuda-runtime-cu11 11.7.99
+nvidia-cudnn-cu11        8.5.0.96
+nvidia-cufft-cu11        10.9.0.58
+nvidia-curand-cu11       10.2.10.91
+nvidia-cusolver-cu11     11.4.0.1
+nvidia-cusparse-cu11     11.7.4.91
+nvidia-nccl-cu11         2.14.3
+nvidia-nvtx-cu11         11.7.91
+Pillow                   10.4.0
+pip                      24.2
+requests                 2.32.3
+setuptools               72.1.0
+sympy                    1.13.2
+torch                    2.0.1
+torchaudio               2.0.2
+torchvision              0.15.2
+triton                   2.0.0
+typing_extensions        4.12.2
+urllib3                  2.2.2
+wheel                    0.43.0
+'''
+
 import os
-import time
-import logging
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import Dataset, DataLoader
 
+import torch.nn as nn
 import torch.utils.data
+import torch.nn.functional as F
 
 import torch.nn.parallel
+from torch.autograd import Variable
 import numpy as np
+import h5py
 from tqdm import tqdm
 
-from model import PointNet, Loss, inplace_relu
-from dataset import PointCloudDataset, pad_collate_fn, random_point_dropout, random_scale_point_cloud, shift_point_cloud
+from dataset import PointCloudDataset, random_point_dropout, random_scale_point_cloud, shift_point_cloud, save_model_params_and_buffers_to_txt
+from model import PointNet, PointNetLoss
+from inference import load_model_params_and_buffers_from_txt
 
-cfg = {
-    'num_class': 10,
-    'total_epoch': 200,
-    'batch_size': 2,
-    'accumulation_step': 1,
-}
+# import provider
+num_class = 10
+total_epoch = 30
+script_dir = os.path.dirname(__file__)  # 获取脚本所在的目录
+
+def inplace_relu(m):
+    classname = m.__class__.__name__
+    if classname.find('ReLU') != -1:
+        m.inplace=True
 
 
-def test(model, loader, num_class=10):
-    mean_correct = []
-    classifier = model.eval()
+# def test(model, loader, num_class=10):
+#     mean_correct = []
+#     classifier = model.eval()
 
-    # for j, (points, target) in tqdm(enumerate(loader), total=len(loader)): 
-    for j, (points, target) in enumerate(loader):
+#     # for j, (points, target) in tqdm(enumerate(loader), total=len(loader)): #显示进度条
+#     for j, (points, target) in enumerate(loader):
 
-        points, target = points.cuda(), target.cuda()
+#         points, target = points.cuda(), target.cuda()
 
-        points = points.transpose(2, 1)
-        pred, _ = classifier(points)
-        pred_choice = pred.data.max(1)[1]
+#         points = points.transpose(2, 1)
+#         pred, _ = classifier(points)
+#         pred_choice = pred.data.max(1)[1]
 
-        correct = pred_choice.eq(target.long().data).cpu().sum()
-        mean_correct.append(correct.item() / float(points.size()[0]))
+#         correct = pred_choice.eq(target.long().data).cpu().sum()
+#         mean_correct.append(correct.item())
 
-    instance_acc = np.mean(mean_correct)
+#     instance_acc = np.sum(mean_correct) / len(loader.dataset)
 
-    return instance_acc
+#     return instance_acc
 
-def save_model_params_and_buffers_to_txt(model, directory):
-    if not os.path.exists(directory):
-        os.makedirs(directory)
+# def pad_collate_fn(batch):
+#     # 找到批次中最小的数组大小
+#     min_size = min([item[0].shape[0] for item in batch])
     
-    for name, param in model.named_parameters():
-        np.savetxt(os.path.join(directory, f'{name}.txt'), param.detach().cpu().numpy().flatten())
+#     # 截断数组
+#     padded_batch = []
+#     for points, target in batch:
+#         # 截断数组
+#         points = points[:min_size, :]
+#         padded_batch.append((points, target))
     
-    for name, buffer in model.named_buffers():
-        np.savetxt(os.path.join(directory, f'{name}.txt'), buffer.detach().cpu().numpy().flatten())
+#     # 使用默认的 collate_fn 处理填充后的批次
+#     return torch.utils.data.dataloader.default_collate(padded_batch)
 
-def setup():
-    os.makedirs('./checkpoints', exist_ok=True)
-    os.makedirs('./logs', exist_ok=True)
 
-    current_timestamp = time.time()
-    local_time = time.localtime(current_timestamp)
-    formatted_time = time.strftime('%m-%d_%H:%M', local_time)
-    log_file = os.path.abspath(os.path.join('./logs', f'{formatted_time}.log'))
-
-    level = logging.INFO
-    fmt = f'%(asctime)-15s [%(levelname)s] | %(message)s'
-
-    def _handler_apply(h):
-        h.setLevel(level)
-        h.setFormatter(logging.Formatter(fmt, datefmt='%Y-%m-%d %H:%M:%S'))
-        return h
-
-    handlers = [
-        logging.StreamHandler(),
-        logging.FileHandler(log_file),
-        ]
-
-    handlers = list(map(_handler_apply, handlers))
-
-    for handler in logging.root.handlers[:]:
-        logging.root.removeHandler(handler)
-
-    logging.basicConfig(
-        format=fmt,
-        level=level,
-        handlers=handlers)
-
-    logging.info('-----------------')
-    logging.info(f'Arguments: {cfg}')
-    logging.info('-----------------')
-
-    logger = logging.getLogger(__name__)
 
 def main():
-    setup()
-
-    data_path = '/home/tsyhahaha/CUDA-NN/data/splits'
+    # 创建数据集实例
+    data_path = '../data/splits'
 
     train_dataset = PointCloudDataset(root=data_path, split='train')
-    test_dataset = PointCloudDataset(root=data_path, split='test')
+    # test_dataset = PointCloudDataset(root=data_path, split='test')
 
-    train_dataloader = DataLoader(train_dataset,
-                                  batch_size=cfg['batch_size'],
-                                  shuffle=True,
-                                  num_workers=10,
-                                  drop_last=True,
-                                  collate_fn=pad_collate_fn)
-    test_dataloader = DataLoader(test_dataset, batch_size=cfg['batch_size'], shuffle=False,collate_fn=pad_collate_fn)
-    logging.info("finish DATA LOADING")
+    # 创建 DataLoader 实例
+    # train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=10, drop_last=True, collate_fn=pad_collate_fn) #batch_size内固定长度截取
+    train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=10, drop_last=True) #全局固定长度填充/截取
+    # test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=10, drop_last=False)
 
+    print("finish DATA LOADING")
 
     '''MODEL LOADING'''
 
-    classifier = PointNet(cfg['num_class'])
-    criterion = Loss()
+    classifier = PointNet(num_class)
+    criterion = PointNetLoss()
     classifier.apply(inplace_relu)
+
+    load_model_params_and_buffers_from_txt(classifier, '/home/tsyhahaha/default')
 
     classifier = classifier.cuda()
     criterion = criterion.cuda()
@@ -123,19 +138,17 @@ def main():
     global_step = 0
     best_instance_acc = 0.0
     best_class_acc = 0.0
-    logging.info("finish MODEL LOADING")
+    print("finish MODEL LOADING")
 
     '''TRANING'''
+    print("start TRANING")
 
-    logging.info("start TRANING")
-    total_epoch = cfg['total_epoch']
-    accumulation_step = cfg['accumulation_step']
     for epoch in range(total_epoch):
+        print('Epoch %d (%d/%s):' % (epoch + 1, epoch + 1, total_epoch))
         mean_correct = []
-        classifier = classifier.train()
+        classifier = classifier.eval()
 
-        # for batch_id, (points, target) in tqdm(enumerate(train_dataloader, 0), total=len(train_dataloader), smoothing=0.9):
-        total_batch = len(train_dataloader)
+        # for batch_id, (points, target) in tqdm(enumerate(train_dataloader, 0), total=len(train_dataloader), smoothing=0.9): #显示进度条
         for batch_id, (points, target) in enumerate(train_dataloader, 0):
             optimizer.zero_grad()
 
@@ -149,42 +162,26 @@ def main():
             points, target = points.cuda(), target.cuda()
 
             pred, trans_feat = classifier(points)
-            loss = criterion(pred, target.long(), trans_feat) / accumulation_step
+            print(pred)
+            loss, base_loss, mat_diff_loss = criterion(pred, target.long(), trans_feat)
+            print(f"total loss: {loss}, base_loss: {base_loss}, mat_diff_loss: {mat_diff_loss}")
+            pred_choice = pred.data.max(1)[1]
+
+            correct = pred_choice.eq(target.long().data).cpu().sum()
+            mean_correct.append(correct.item() / float(points.size()[0]))
             loss.backward()
-
-
-            if (batch_id + 1) % accumulation_step == 0:
-                lr = scheduler.get_last_lr()[0]
-                logging.info('Epoch [%d/%d]\tBatch [%d/%d]  \tloss=%.3f\tlr=%.5f' % (epoch + 1, total_epoch, batch_id, total_batch, loss, lr))
-
-                pred_choice = pred.data.max(1)[1]
-                correct = pred_choice.eq(target.long().data).cpu().sum()
-                mean_correct.append(correct.item() / float(points.size()[0]))
-
-                optimizer.step()
-                global_step += 1
+            optimizer.step()
+            global_step += 1
+            import pdb; pdb.set_trace()
 
         scheduler.step()
 
         train_instance_acc = np.mean(mean_correct)
 
-        logging.info('Train Instance Accuracy: %f' % train_instance_acc)
+        print('Train Instance Accuracy: %f' % train_instance_acc)
 
-        with torch.no_grad():
-            instance_acc = test(classifier.eval(), test_dataloader, num_class=cfg['num_class'])
-
-            if (instance_acc >= best_instance_acc):
-                best_instance_acc = instance_acc
-                best_epoch = epoch + 1
-                torch.save(classifier.state_dict(), './checkpoints/best_model.pth')
-                save_model_params_and_buffers_to_txt(classifier, f'./checkpoints/best_model')
-            save_model_params_and_buffers_to_txt(classifier, f'./checkpoints/epoch_{epoch}')
-
-            logging.info('Epoch [%d] - Test Instance Accuracy: %f' % (epoch + 1, instance_acc))
-            logging.info('Best Instance Accuracy: %f' % (best_instance_acc))
-
-    logging.info("finish TRANING")
-    save_model_params_and_buffers_to_txt(classifier, f'./checkpoints/epoch_last')
+    print("finish TRANING")
+    save_model_params_and_buffers_to_txt(classifier, script_dir)
 
 if __name__ == '__main__':
     main()
