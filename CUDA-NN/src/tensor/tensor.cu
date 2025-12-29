@@ -74,6 +74,7 @@ std::vector<float> Tensor::toVec() {
     float* h_data = this->toHost();
     size_t size = this->getSize();
     std::vector<float> vec(h_data, h_data + size);
+    free(h_data);
     return vec;
 }
 
@@ -127,7 +128,7 @@ void Tensor::setData(float* data) {
 }
 
 void Tensor::load(float* h_data, size_t n_data) {
-    assert(n_data = this->n_data);
+    assert(n_data == this->n_data);
     CHECK(cudaMemcpy(d_data, h_data, n_data * sizeof(float), cudaMemcpyHostToDevice));
 }
 
@@ -236,7 +237,7 @@ void Tensor::flatten() {
 void Tensor::transpose() {
     if(this->shape.size() == 2) {
         DimVector shape_o = this->shape;
-        std::swap(shape_o[1], shape_o[2]);
+        std::swap(shape_o[0], shape_o[1]);
 
         if(this->transpose_cache == nullptr) {
             CHECK(cudaMalloc((float**)&transpose_cache, this->n_data * sizeof(float)));
