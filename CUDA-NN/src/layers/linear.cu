@@ -104,7 +104,7 @@ void kLinear2D_v1(float* input, float* d_out, float* weights, float* bias, int M
     for(int i=0; i<TM; i++) {
         for(int j=0; j<TN; j++) {
             if (row + i < M && col + j < N) {
-                d_out[(row + i) * N + col + j] = tie[i][j] + bias[row+i];
+                d_out[(row + i) * N + col + j] = tie[i][j] + bias[col+j];
             }
         }
     }
@@ -197,10 +197,10 @@ void kLinear2D_v3(float* input, float* d_out, float* weights, float* bias, int M
                 ds_B[threadIdx.y*4+2][threadIdx.x] = tmp[2];
                 ds_B[threadIdx.y*4+3][threadIdx.x] = tmp[3];
             } else {
-                ds_B[threadIdx.x][threadIdx.y*4+0] = 0.0f;
-                ds_B[threadIdx.x][threadIdx.y*4+1] = 0.0f;
-                ds_B[threadIdx.x][threadIdx.y*4+2] = 0.0f;
-                ds_B[threadIdx.x][threadIdx.y*4+3] = 0.0f;
+                ds_B[threadIdx.y*4+0][threadIdx.x] = 0.0f;
+                ds_B[threadIdx.y*4+1][threadIdx.x] = 0.0f;
+                ds_B[threadIdx.y*4+2][threadIdx.x] = 0.0f;
+                ds_B[threadIdx.y*4+3][threadIdx.x] = 0.0f;
             }
 
         }

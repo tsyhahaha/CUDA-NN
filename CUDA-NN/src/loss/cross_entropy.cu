@@ -12,55 +12,59 @@ void kSoftMaxCrossEntropyLoss(float* logits, float* labels, float* loss, int N, 
     if(x >= N) return;
 
     __shared__ float sd_data[BLOCK_SIZE1D];
-    float cur_max = 0.0f;
+    float cur_max = -1e30f;
     float sum = 0.0f;
     float tmpError = 0.0f;
 
-    // reduce to get maximum `cur_max`
+    // Step 1: reduce to get maximum `cur_max`
     int iter = (L-1)/BLOCK_SIZE1D + 1;
     for(int i=0; i<iter; i++) {
-        if (i*BLOCK_SIZE1D + tid < L) {
-            sd_data[tid] = logits[x*L + i*BLOCK_SIZE1D + tid];
+        int idx = i*BLOCK_SIZE1D + tid;
+        if (idx < L) {
+            sd_data[tid] = logits[x*L + idx];
+        } else {
+            sd_data[tid] = -1e30f;
         }
         __syncthreads();
 
         for(int stride=blockDim.x/2; stride>0; stride>>=1) {
-            if(tid < stride && tid + stride + i*BLOCK_SIZE1D < L) {
+            if(tid < stride) {
                 sd_data[tid] = sd_data[tid] > sd_data[tid + stride] ? sd_data[tid] : sd_data[tid+stride];
             }
             __syncthreads();
         }
         cur_max = cur_max >= sd_data[0] ? cur_max : sd_data[0];
+        __syncthreads();
     }
 
-    // exp()
+    // Step 2: compute exp(x - max) and sum
     for(int i=0; i<iter; i++) {
-        if (i*BLOCK_SIZE1D + tid < L) {
-            sd_data[tid] = expf(logits[x*L + i*BLOCK_SIZE1D + tid] - cur_max);
+        int idx = i*BLOCK_SIZE1D + tid;
+        if (idx < L) {
+            sd_data[tid] = expf(logits[x*L + idx] - cur_max);
+        } else {
+            sd_data[tid] = 0.0f;
         }
         __syncthreads();
 
         for(int stride=blockDim.x/2; stride>0; stride>>=1) {
-            if(tid < stride && tid + stride + i*BLOCK_SIZE1D < L) {
+            if(tid < stride) {
                 sd_data[tid] = sd_data[tid] + sd_data[tid + stride];
             }
             __syncthreads();
         }
         sum += sd_data[0];
+        __syncthreads();
     }
 
+    // Step 3: compute cross entropy loss
     for(int i=0; i<iter; i++) {
-        if (i*BLOCK_SIZE1D + tid < L) {
-            sd_data[tid] = expf(logits[x*L + i*BLOCK_SIZE1D + tid] - cur_max);
-        }
-        __syncthreads();
-
-        float sm_output = sd_data[tid]/sum;
-        __syncthreads();
-
-        float label = labels[x*L + i*BLOCK_SIZE1D + tid];
-        if (i*BLOCK_SIZE1D + tid < L) {
-            tmpError -=  label * logf(sm_output) + (1-label) * logf(1 - sm_output);
+        int idx = i*BLOCK_SIZE1D + tid;
+        if (idx < L) {
+            float exp_val = expf(logits[x*L + idx] - cur_max);
+            float sm_output = fmaxf(fminf(exp_val / (sum + 1e-8f), 1.0f - 1e-8f), 1e-8f);
+            float label = labels[x*L + idx];
+            tmpError -= label * logf(sm_output) + (1.0f - label) * logf(1.0f - sm_output);
         }
     }
     atomicAdd(loss, tmpError);

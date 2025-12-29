@@ -14,13 +14,15 @@ void kNegativeLikelihoodLoss(float* logits, float* labels, float* loss, bool mea
     for(int i=0; i<iter; i++) {
         if(i * BLOCK_SIZE1D + tid < L) {
             float label = labels[bidx*L + i*BLOCK_SIZE1D + tid];
-            float pred = logits[bidx*L + i * BLOCK_SIZE1D + tid];
+            float pred = fmaxf(logits[bidx*L + i * BLOCK_SIZE1D + tid], 1e-8f);
             sd_data[tid] = -label * logf(pred);
+        } else {
+            sd_data[tid] = 0.0f;
         }
         __syncthreads();
 
         for(int stride=blockDim.x/2; stride>0; stride>>=1) {
-            if(tid < stride && tid + stride + i*BLOCK_SIZE1D < L) {
+            if(tid < stride) {
                 sd_data[tid] = sd_data[tid] + sd_data[tid + stride];
             }
             __syncthreads();
@@ -33,6 +35,7 @@ void kNegativeLikelihoodLoss(float* logits, float* labels, float* loss, bool mea
                 tmpError += sd_data[0];
             }
         }
+        __syncthreads();
     }
     if(tid == 0) {
         atomicAdd(loss, tmpError);
@@ -50,7 +53,7 @@ void kNegativeLikelihoodLossBP(float* logits, float* labels, float* d_out, bool 
     for(int i=0; i<iter; i++) {
         if(i * BLOCK_SIZE1D + tid < L) {
             float label = labels[bidx*L + i*BLOCK_SIZE1D + tid];
-            float pred = logits[bidx*L + i * BLOCK_SIZE1D + tid];
+            float pred = fmaxf(logits[bidx*L + i * BLOCK_SIZE1D + tid], 1e-8f);
             
             if(mean) {
                 d_out[bidx*L + i * BLOCK_SIZE1D + tid] = -(label / pred) / L;

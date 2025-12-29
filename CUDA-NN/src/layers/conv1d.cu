@@ -520,7 +520,7 @@ void kBackprop_to_weights(
 Conv1d::Conv1d(std::string prefix, size_t in_channels, size_t out_channels, size_t kernel_size, bool bias) {
     this->in_channels = in_channels;
     this->out_channels = out_channels;
-    this->kernel_size = this->kernel_size;
+    this->kernel_size = kernel_size;
 
     this->prefix = prefix;
 
@@ -539,7 +539,7 @@ Conv1d::Conv1d(std::string prefix, size_t in_channels, size_t out_channels, size
 Conv1d::Conv1d(size_t in_channels, size_t out_channels, size_t kernel_size, bool bias) {
     this->in_channels = in_channels;
     this->out_channels = out_channels;
-    this->kernel_size = this->kernel_size;
+    this->kernel_size = kernel_size;
 
     if(kernel_size != 1) {
         perror("Not implemented!");

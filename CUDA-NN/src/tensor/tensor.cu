@@ -172,7 +172,7 @@ void Tensor::setData(float* data) {
 }
 
 void Tensor::load(float* h_data, size_t n_data) {
-    assert(n_data = this->n_data);
+    assert(n_data == this->n_data);
     CHECK(cudaMemcpy(d_data, h_data, n_data * sizeof(float), cudaMemcpyHostToDevice));
 }
 

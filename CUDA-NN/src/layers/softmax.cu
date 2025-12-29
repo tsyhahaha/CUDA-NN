@@ -8,58 +8,60 @@ void kSoftmax(float* d_data, float* d_out, size_t C, size_t L, bool apply_log) {
 
     if(x >= C) return;
 
-    __shared__ float sd_data[BLOCK_SIZE1D];
     __shared__ float sd_M[BLOCK_SIZE1D];
-    float cur_max = 0.0f;
+    float cur_max = -1e30f;
     float sum = 0.0f;
 
-    // reduce to get maximum `cur_max`
+    // Step 1: reduce to get maximum `cur_max`
     int iter = (L-1)/BLOCK_SIZE1D + 1;
     for(int i=0; i<iter; i++) {
-        if (i*BLOCK_SIZE1D + tid < L) {
-            sd_data[tid] = d_data[x*L + i*BLOCK_SIZE1D + tid];
-        }
-        __syncthreads();
-        if (i*BLOCK_SIZE1D + tid < L) {
-            sd_M[tid] = sd_data[tid];
+        int idx = i*BLOCK_SIZE1D + tid;
+        if (idx < L) {
+            sd_M[tid] = d_data[x*L + idx];
+        } else {
+            sd_M[tid] = -1e30f;
         }
         __syncthreads();
 
         for(int stride=blockDim.x/2; stride>0; stride>>=1) {
-            if(tid < stride && tid + stride + i*BLOCK_SIZE1D < L) {
-                sd_M[tid] = sd_M[tid] > sd_M[tid + stride] ? sd_M[tid] : sd_M[tid+stride];
+            if(tid < stride) {
+                sd_M[tid] = sd_M[tid] > sd_M[tid + stride] ? sd_M[tid] : sd_M[tid + stride];
             }
             __syncthreads();
         }
         cur_max = cur_max >= sd_M[0] ? cur_max : sd_M[0];
+        __syncthreads();
     }
 
+    // Step 2: compute exp(x - max) and reduce to get sum
     for(int i=0; i<iter; i++) {
-        if (i*BLOCK_SIZE1D + tid < L) {
-            sd_data[tid] = expf(sd_data[tid] - cur_max);
-        }
-        __syncthreads();
-
-        if (i*BLOCK_SIZE1D + tid < L) {
-            sd_M[tid] = sd_data[tid];
+        int idx = i*BLOCK_SIZE1D + tid;
+        if (idx < L) {
+            sd_M[tid] = expf(d_data[x*L + idx] - cur_max);
+        } else {
+            sd_M[tid] = 0.0f;
         }
         __syncthreads();
 
         for(int stride=blockDim.x/2; stride>0; stride>>=1) {
-            if(tid < L && tid + stride < L && tid < stride && tid + stride + i*BLOCK_SIZE1D < L) {
+            if(tid < stride) {
                 sd_M[tid] = sd_M[tid] + sd_M[tid + stride];
             }
             __syncthreads();
         }
-        sum = sd_M[0];
+        sum += sd_M[0];
+        __syncthreads();
     }
 
+    // Step 3: normalization and write output
     for(int i=0; i<iter; i++) {
-        if(tid < L) {
+        int idx = i*BLOCK_SIZE1D + tid;
+        if (idx < L) {
+            float exp_val = expf(d_data[x*L + idx] - cur_max);
             if(apply_log) {
-                d_out[x*L + i*BLOCK_SIZE1D + tid] = logf(sd_data[tid]/(sum + 1e-4));
+                d_out[x*L + idx] = logf(exp_val / (sum + 1e-8f));
             } else {
-                d_out[x*L + i*BLOCK_SIZE1D + tid] = sd_data[tid]/(sum + 1e-4);
+                d_out[x*L + idx] = exp_val / (sum + 1e-8f);
             }
         }
     }
@@ -67,17 +69,44 @@ void kSoftmax(float* d_data, float* d_out, size_t C, size_t L, bool apply_log) {
 
 
 __global__
-void kSoftMaxBP(float* d_out, float* d_logits, float* d_grad, size_t N, size_t L) {
-    // assume that not apply_log
-    // It'll be faster if blocksize is the factor of L.
+void kSoftMaxBP(float* d_out, float* softmax_out, float* d_grad, size_t N, size_t L) {
+    // Softmax backward: d_input = softmax * (d_out - sum(d_out * softmax))
+    // For each sample x, compute: d_grad[j] = softmax[j] * (d_out[j] - sum_k(d_out[k] * softmax[k]))
     int x = blockIdx.x;
     int tid = threadIdx.x;
 
+    if(x >= N) return;
+
+    __shared__ float sd_sum[BLOCK_SIZE1D];
+    float local_sum = 0.0f;
+
+    // Step 1: compute sum(d_out * softmax) for this sample
     int iter = (L-1)/BLOCK_SIZE1D + 1;
     for(int i=0; i<iter; i++) {
-        if(tid + i*BLOCK_SIZE1D < L && x < N) {
-            float logits = d_logits[x*L + tid + i*BLOCK_SIZE1D];
-            d_grad[x*L + tid + i*BLOCK_SIZE1D] = d_out[x*L + tid + i*BLOCK_SIZE1D] * logits * (1-logits);
+        int idx = i*BLOCK_SIZE1D + tid;
+        if(idx < L) {
+            sd_sum[tid] = d_out[x*L + idx] * softmax_out[x*L + idx];
+        } else {
+            sd_sum[tid] = 0.0f;
+        }
+        __syncthreads();
+
+        for(int stride=blockDim.x/2; stride>0; stride>>=1) {
+            if(tid < stride) {
+                sd_sum[tid] += sd_sum[tid + stride];
+            }
+            __syncthreads();
+        }
+        local_sum += sd_sum[0];
+        __syncthreads();
+    }
+
+    // Step 2: compute d_grad = softmax * (d_out - sum)
+    for(int i=0; i<iter; i++) {
+        int idx = i*BLOCK_SIZE1D + tid;
+        if(idx < L) {
+            float s = softmax_out[x*L + idx];
+            d_grad[x*L + idx] = s * (d_out[x*L + idx] - local_sum);
         }
     }
 }

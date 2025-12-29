@@ -44,7 +44,7 @@ void SGD::step() {
         }
         Tensor* trainable_tensor = name_params[name];
         grads_cache[name]->add_(grads_acc, momentum, 1.0f);
-        trainable_tensor->add_(grads_cache[name], 1.0f, get_lr());
+        trainable_tensor->sub_(grads_cache[name], 1.0f, get_lr());
 
         // std::string file_name = "/home/tsyhahaha/CUDA-NN/data/grads/" + name + "_grads.txt";
         // std::vector data_vec = grads_cache[name]->toVec();
